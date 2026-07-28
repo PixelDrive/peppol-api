@@ -1,0 +1,22 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "compilerOptions": {
+        "declaration": true,
+        "declarationMap": true,
+        "esModuleInterop": true,
+        "incremental": true,
+        "isolatedModules": true,
+        "lib": ["esnext", "DOM", "DOM.Iterable"],
+        "module": "esnext",
+        "moduleDetection": "force",
+        "moduleResolution": "Bundler",
+        "noUncheckedIndexedAccess": true,
+        "outDir": "dist",
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "target": "ES2022",
+        "types": ["node", "vitest/globals"]
+    },
+    "include": ["src", "tests", "drizzle.config.ts", "vite.config.ts"]
+}
