@@ -39,3 +39,37 @@ export function canonicalEndpoint(endpoint: {
 }): string {
     return `${endpoint.scheme.trim()}:${endpoint.id.trim()}`.toLowerCase();
 }
+
+const peppolParticipantPattern = /^(\d{4}):([A-Z\d._~-]{1,130})$/i;
+
+/**
+ * Normalizes a generic Peppol Participant Identifier. Bare Belgian BCE/KBO or
+ * VAT values are accepted as a convenience and mapped to scheme 0208.
+ */
+export function normalizePeppolParticipantIdentifier(value: string): {
+    scheme: string;
+    value: string;
+    canonical: string;
+} {
+    const trimmed = value.trim();
+    const candidate = trimmed.includes(':')
+        ? trimmed
+        : toBelgianPeppolEndpoint(trimmed).canonical;
+    const match = peppolParticipantPattern.exec(candidate);
+    if (!match) {
+        throw new Error(
+            'Peppol participant identifier must use <4-digit scheme>:<value> and contain only letters, digits, dot, underscore, tilde or hyphen'
+        );
+    }
+
+    const [, scheme, rawValue] = match;
+    const normalizedValue =
+        scheme === '0208'
+            ? normalizeBelgianEnterpriseNumber(rawValue!)
+            : rawValue!.toLowerCase();
+    return {
+        scheme: scheme!,
+        value: normalizedValue,
+        canonical: `${scheme}:${normalizedValue}`,
+    };
+}

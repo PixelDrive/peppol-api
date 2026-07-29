@@ -35,9 +35,29 @@
       Validation: build scripts and configuration checks.
 - [x] Run the final format, lint, type, unit-test and production-build suite.
       Files: all.
-      Validation: Prettier, ESLint, TypeScript, 13 unit tests, Vite build,
-      generated OpenAPI (17 paths) and Docker image build all pass.
+      Validation: Prettier, ESLint, TypeScript, 21 local tests, Vite build and
+      generated OpenAPI (18 paths) pass. The network smoke test also passes
+      when explicitly enabled.
 - [x] Add the MIT license and expose it through package metadata and project
       documentation.
       Files: `LICENSE`, `package.json`, `README.md`.
       Validation: package metadata and license text reviewed.
+- [x] Allow startup with empty provider environment variables while preserving
+      runtime guards when the provider is used.
+      Files: `src/config.ts`, `tests/config.test.ts`.
+      Validation: configuration tests cover empty and configured Dokapi values.
+- [x] Move client webhook delivery to a separate durable BullMQ worker backed
+      by Redis and a PostgreSQL outbox reconciler.
+      Files: `src/queues/`, `src/workers/`, `src/webhooks/delivery.ts`,
+      `docker-compose.yml`, `vite.config.ts`.
+      Validation: stable job IDs and retry settings are covered by tests;
+      TypeScript, ESLint, Prettier, 17 tests and the dual-entry Vite production
+      build pass.
+- [x] Add provider-independent Peppol participant lookup through SML and SMP.
+      Files: `src/peppol/discovery.ts`, `src/routers/participants/`,
+      `tests/peppol-discovery.test.ts`.
+      Validation: the official SHA-256/Base32 DNS example, U-NAPTR selection,
+      SMP ServiceGroup parsing and absent-participant behavior are covered by
+      tests. A separate network smoke test verifies `0208:0732788874` against
+      the production SML/SMP without making the default test suite depend on
+      Internet access.

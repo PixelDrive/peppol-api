@@ -2,7 +2,9 @@
 
 API TypeScript multi-tenant construite avec Hono et oRPC. Elle fournit une
 abstraction au-dessus des access points Peppol, avec Dokapi comme premier
-adapter, sans déléguer la validation UBL au provider.
+adapter, sans déléguer la validation UBL au provider. Les traitements de
+webhooks sont exécutés dans un worker BullMQ séparé, avec Redis comme queue
+durable.
 
 ## Principes de sécurité
 
@@ -41,13 +43,20 @@ L’API est disponible sur `http://localhost:3001` :
 Les migrations Drizzle sont appliquées au démarrage quand
 `RUN_MIGRATIONS=true`.
 
+Les variables Dokapi peuvent rester vides : aucun provider n’est requis pour
+démarrer l’application. Une entreprise configurée pour utiliser les credentials
+globaux recevra une erreur `PRECONDITION_FAILED` au moment d’un envoi tant que
+`DOKAPI_CLIENT_ID` et `DOKAPI_CLIENT_SECRET` ne sont pas configurés.
+
 Pour développer hors Docker :
 
 ```bash
 pnpm install
-docker compose up -d postgres
+docker compose up -d postgres redis
 pnpm db:migrate
 pnpm dev
+# Dans un second terminal
+pnpm dev:worker
 ```
 
 ## Flux d’administration
@@ -87,11 +96,43 @@ Passer la clé dans `x-api-key`.
   l’adapter configuré.
 - `GET /api/documents` et `GET /api/documents/{documentId}` : suivi strictement
   limité au tenant.
+- `GET /api/participants/lookup?participantId=0208%3A0732788875` : vérifie
+  directement l’inscription d’un participant dans le réseau Peppol et retourne
+  les types de documents annoncés par son SMP.
 - `/api/webhook-endpoints` : configuration et historique des webhooks clients.
 
 Les documents entrants signalés par Dokapi sont téléchargés, vérifiés contre
 l’EndpointID destinataire, validés avec KoSIT, persistés puis notifiés à
 l’entreprise.
+
+## Lookup des participants Peppol
+
+Le lookup est indépendant des providers configurés. Il applique le mécanisme
+officiel SML/SMP actuellement en vigueur :
+
+1. normalisation du Participant Identifier, avec support des formes belges BCE,
+   TVA et `0208:<BCE>` ;
+2. calcul du nom DNS avec SHA-256 et Base32 ;
+3. résolution du record U-NAPTR `Meta:SMP` ;
+4. lecture HTTPS du `ServiceGroup` sur le SMP découvert ;
+5. extraction des types de documents annoncés.
+
+L’endpoint nécessite une clé API entreprise. Une absence de record DNS retourne
+`registered: false`. Une panne DNS, un record non conforme ou une réponse SMP
+invalide retourne une erreur de gateway afin de ne pas confondre une panne du
+réseau avec une entreprise non inscrite.
+
+`PEPPOL_SML_DOMAIN` permet de sélectionner un autre environnement SML et
+`PEPPOL_LOOKUP_TIMEOUT_MS` limite la durée de l’appel externe. Le domaine de
+production par défaut est `edelivery.tech.ec.europa.eu`.
+
+Un smoke test vérifie l’entreprise `0732788874` directement sur le réseau de
+production. Il est séparé de la suite unitaire pour ne pas rendre les tests
+locaux et CI dépendants d’Internet :
+
+```bash
+pnpm test:network
+```
 
 ## Webhooks clients
 
@@ -115,6 +156,17 @@ Headers envoyés :
 
 Les échecs sont persistés et retentés avec backoff exponentiel. Le consommateur
 doit dédupliquer sur `x-peppol-delivery`.
+
+Chaque livraison est d’abord enregistrée dans l’outbox PostgreSQL, puis publiée
+dans Redis avec son UUID comme `jobId` BullMQ. Le service `webhook-worker`
+continue donc les livraisons et retries lorsque le processus HTTP redémarre ou
+est indisponible. Un scanner dans le worker republie périodiquement les lignes
+`PENDING` qui n’auraient pas atteint Redis après un crash entre l’écriture SQL
+et la publication.
+
+Redis utilise AOF dans Docker Compose et un volume persistant. En production,
+l’API et `node dist/worker.mjs` doivent être déployés comme deux processus
+indépendants partageant la même base et le même `REDIS_URL`.
 
 Le webhook Dokapi entrant exige `x-webhook-secret`, qui doit correspondre à
 `DOKAPI_WEBHOOK_SECRET`.

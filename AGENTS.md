@@ -6,8 +6,11 @@
 - Runtime: Node.js 20+ with Hono and oRPC.
 - Database: PostgreSQL with Drizzle ORM. Schema is in `src/db/schema.ts`;
   checked-in migrations are in `drizzle/`.
-- `src/index.ts` runs migrations, bootstraps the optional administrator, starts
-  the webhook retry worker and serves the Hono app on port 3001.
+- Redis + BullMQ provide durable background processing.
+- `src/index.ts` runs migrations, bootstraps the optional administrator and
+  serves the Hono app on port 3001.
+- `src/workers/index.ts` is a separate process that consumes client webhook
+  deliveries and reconciles the PostgreSQL outbox with Redis.
 - `/api/*` is the OpenAPI transport, `/rpc/*` is the native oRPC transport,
   `/openapi.json` is the specification and `/` is Scalar.
 
@@ -19,6 +22,10 @@
   `src/routes/provider-webhooks/`; API contracts live under `src/routers/`.
 - Provider-independent behavior lives under `src/peppol/`. Provider adapters
   implement `PeppolProvider` under `src/providers/`.
+- Peppol participant discovery lives in `src/peppol/discovery.ts` and must use
+  the current SHA-256/Base32 SML U-NAPTR flow, independently from providers.
+- Queue producers live under `src/queues/`; workers must stay under
+  `src/workers/` and must never be started by the HTTP entrypoint.
 - Add a provider by implementing the interface, extending the database enum and
   factory, then adding an authenticated callback adapter if required.
 - Exported business helpers and non-obvious security logic need concise JSDoc.
@@ -34,14 +41,19 @@
   number may be accepted as input only to derive the BCE number.
 - Parse the supplier EndpointID from the final UBL XML and call
   `assertSenderBelongsToEnterprise` before validation or provider submission.
+- Participant lookup failures must distinguish an absent DNS record from SML
+  or SMP infrastructure failures; never report an outage as "not registered".
 - KoSIT validation is independent of providers and is enabled before sending by
   default.
 - Provider callbacks must be authenticated and idempotent. Client callbacks
-  must be persisted, HMAC-signed and retryable.
+  must be persisted, HMAC-signed and retryable through BullMQ.
+- PostgreSQL is the webhook outbox source of truth. Always persist a delivery
+  before enqueueing it and retain reconciliation for failed Redis publication.
 
 ## Commands
 
 - `pnpm dev`
+- `pnpm dev:worker`
 - `pnpm check-types`
 - `pnpm lint`
 - `pnpm test`

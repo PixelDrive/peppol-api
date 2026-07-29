@@ -20,7 +20,14 @@ describe('credential encryption', () => {
     it('detects tampering', async () => {
         const { decrypt, encrypt } = await import('../src/lib/crypto');
         const encrypted = encrypt('secret');
-        const tampered = `${encrypted.slice(0, -1)}A`;
+        const [version, iv, tag, ciphertext] = encrypted.split('.');
+        const replacement = ciphertext![0] === 'A' ? 'B' : 'A';
+        const tampered = [
+            version,
+            iv,
+            tag,
+            `${replacement}${ciphertext!.slice(1)}`,
+        ].join('.');
         expect(() => decrypt(tampered)).toThrow();
     });
 });

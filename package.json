@@ -12,11 +12,14 @@
         "db:migrate": "drizzle-kit migrate",
         "db:studio": "drizzle-kit studio",
         "dev": "tsx watch src/index.ts",
+        "dev:worker": "tsx watch src/workers/index.ts",
         "format": "prettier --write \"**/*.{ts,md,json,yml,yaml}\"",
         "format:check": "prettier --check \"**/*.{ts,md,json,yml,yaml}\"",
         "lint": "eslint .",
         "start": "node dist/index.mjs",
-        "test": "vitest run"
+        "start:worker": "node dist/worker.mjs",
+        "test": "vitest run",
+        "test:network": "RUN_NETWORK_TESTS=true vitest run tests/network/peppol-discovery.test.ts"
     },
     "dependencies": {
         "@dotenvx/dotenvx": "1.64.0",
@@ -25,8 +28,11 @@
         "@orpc/server": "1.14.0",
         "@orpc/zod": "1.14.0",
         "@pixeldrive/peppol-toolkit": "0.8.2",
+        "bullmq": "5.76.4",
         "drizzle-orm": "0.45.2",
+        "fast-xml-parser": "5.10.1",
         "hono": "4.12.15",
+        "ioredis": "5.10.1",
         "pino": "10.3.1",
         "postgres": "3.4.8",
         "zod": "4.3.6"

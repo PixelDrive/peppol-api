@@ -4,13 +4,13 @@ import { getConfig } from '../config';
 import type { Database } from '../db/client';
 import { webhookDeliveries, webhookEndpoints } from '../db/schema';
 import { decrypt } from '../lib/crypto';
-import type { logger as rootLogger } from '../lib/logger';
+import { logger } from '../lib/logger';
+import { enqueueWebhookDelivery } from '../queues/webhook-deliveries';
 import type { WebhookEventType } from './events';
 
-type Logger = typeof rootLogger;
-
 /**
- * Persists one delivery per subscribed tenant endpoint.
+ * Persists one outbox delivery per subscribed tenant endpoint, then publishes
+ * idempotent BullMQ jobs. Failed publications are recovered by reconciliation.
  */
 export async function emitWebhookEvent(
     db: Database,
@@ -35,43 +35,101 @@ export async function emitWebhookEvent(
         return;
     }
 
-    await db.insert(webhookDeliveries).values(
-        subscribed.map((endpoint) => ({
-            webhookEndpointId: endpoint.id,
-            documentId,
-            event,
-            payload: {
-                id: documentId,
-                type: event,
-                createdAt: new Date().toISOString(),
-                data,
-            },
-        }))
+    const deliveries = await db
+        .insert(webhookDeliveries)
+        .values(
+            subscribed.map((endpoint) => ({
+                webhookEndpointId: endpoint.id,
+                documentId,
+                event,
+                payload: {
+                    id: documentId,
+                    type: event,
+                    createdAt: new Date().toISOString(),
+                    data,
+                },
+            }))
+        )
+        .returning({ id: webhookDeliveries.id });
+
+    const publications = await Promise.allSettled(
+        deliveries.map(({ id }) => enqueueWebhookDelivery(id))
+    );
+    for (const [index, publication] of publications.entries()) {
+        if (publication.status === 'rejected') {
+            logger.warn(
+                {
+                    deliveryId: deliveries[index]?.id,
+                    error: publication.reason,
+                },
+                'Webhook saved to outbox but BullMQ publication failed'
+            );
+        }
+    }
+}
+
+export function calculateWebhookRetryDelay(attemptNumber: number): number {
+    return Math.min(
+        getConfig().WEBHOOK_RETRY_BASE_DELAY_MS *
+            2 ** Math.max(attemptNumber - 1, 0),
+        6 * 60 * 60 * 1000
     );
 }
 
-async function deliverOne(
+/**
+ * Processes one durable BullMQ delivery job and mirrors its state to the SQL
+ * outbox. Throwing delegates retry timing and crash recovery to BullMQ.
+ */
+export async function deliverWebhookJob(
     db: Database,
-    logger: Logger,
-    delivery: typeof webhookDeliveries.$inferSelect,
-    endpoint: typeof webhookEndpoints.$inferSelect
+    deliveryId: string,
+    attemptNumber: number,
+    maxAttempts: number
 ): Promise<void> {
-    const payload = JSON.stringify(delivery.payload);
+    const [record] = await db
+        .select({ delivery: webhookDeliveries, endpoint: webhookEndpoints })
+        .from(webhookDeliveries)
+        .innerJoin(
+            webhookEndpoints,
+            eq(webhookEndpoints.id, webhookDeliveries.webhookEndpointId)
+        )
+        .where(eq(webhookDeliveries.id, deliveryId))
+        .limit(1);
+
+    if (!record || record.delivery.status !== 'PENDING') {
+        return;
+    }
+    if (!record.endpoint.active) {
+        await db
+            .update(webhookDeliveries)
+            .set({
+                status: 'FAILED',
+                errorMessage: 'Webhook endpoint is disabled',
+                updatedAt: new Date(),
+            })
+            .where(eq(webhookDeliveries.id, deliveryId));
+        return;
+    }
+
+    const payload = JSON.stringify(record.delivery.payload);
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    const signature = createHmac('sha256', decrypt(endpoint.encryptedSecret))
+    const signature = createHmac(
+        'sha256',
+        decrypt(record.endpoint.encryptedSecret)
+    )
         .update(`${timestamp}.${payload}`)
         .digest('hex');
 
     let responseStatus: number | undefined;
     let errorMessage: string | undefined;
     try {
-        const response = await fetch(endpoint.url, {
+        const response = await fetch(record.endpoint.url, {
             method: 'POST',
             headers: {
                 'content-type': 'application/json',
                 'user-agent': 'peppol-hono-api-webhooks/1.0',
-                'x-peppol-delivery': delivery.id,
-                'x-peppol-event': delivery.event,
+                'x-peppol-delivery': record.delivery.id,
+                'x-peppol-event': record.delivery.event,
                 'x-peppol-timestamp': timestamp,
                 'x-peppol-signature': `v1=${signature}`,
             },
@@ -84,12 +142,13 @@ async function deliverOne(
                 .update(webhookDeliveries)
                 .set({
                     status: 'DELIVERED',
-                    attempts: delivery.attempts + 1,
+                    attempts: attemptNumber,
                     responseStatus,
+                    errorMessage: null,
                     deliveredAt: new Date(),
                     updatedAt: new Date(),
                 })
-                .where(eq(webhookDeliveries.id, delivery.id));
+                .where(eq(webhookDeliveries.id, deliveryId));
             return;
         }
         errorMessage = `HTTP ${response.status}`;
@@ -97,36 +156,37 @@ async function deliverOne(
         errorMessage = error instanceof Error ? error.message : String(error);
     }
 
-    const attempts = delivery.attempts + 1;
-    const exhausted = attempts >= getConfig().WEBHOOK_MAX_ATTEMPTS;
-    const delaySeconds = Math.min(2 ** attempts * 30, 6 * 60 * 60);
+    const exhausted = attemptNumber >= maxAttempts;
     await db
         .update(webhookDeliveries)
         .set({
             status: exhausted ? 'FAILED' : 'PENDING',
-            attempts,
+            attempts: attemptNumber,
             responseStatus,
             errorMessage,
-            nextAttemptAt: new Date(Date.now() + delaySeconds * 1000),
+            nextAttemptAt: new Date(
+                Date.now() + calculateWebhookRetryDelay(attemptNumber)
+            ),
             updatedAt: new Date(),
         })
-        .where(eq(webhookDeliveries.id, delivery.id));
+        .where(eq(webhookDeliveries.id, deliveryId));
+
     logger.warn(
-        { deliveryId: delivery.id, attempts, errorMessage },
+        { deliveryId, attemptNumber, maxAttempts, errorMessage },
         'Client webhook delivery failed'
     );
+    throw new Error(errorMessage);
 }
 
 /**
- * Delivers due webhooks. Concurrent workers safely re-deliver only idempotent
- * delivery IDs; consumers should de-duplicate on x-peppol-delivery.
+ * Republishes due SQL outbox rows. Stable BullMQ job IDs make this safe when a
+ * job is already waiting, active or delayed.
  */
-export async function deliverPendingWebhooks(
-    db: Database,
-    logger: Logger
+export async function reconcilePendingWebhookDeliveries(
+    db: Database
 ): Promise<void> {
     const pending = await db
-        .select({ delivery: webhookDeliveries, endpoint: webhookEndpoints })
+        .select({ id: webhookDeliveries.id })
         .from(webhookDeliveries)
         .innerJoin(
             webhookEndpoints,
@@ -139,21 +199,18 @@ export async function deliverPendingWebhooks(
                 eq(webhookEndpoints.active, true)
             )
         )
-        .limit(25);
+        .limit(100);
 
-    await Promise.all(
-        pending.map(({ delivery, endpoint }) =>
-            deliverOne(db, logger, delivery, endpoint)
-        )
+    const publications = await Promise.allSettled(
+        pending.map(({ id }) => enqueueWebhookDelivery(id))
     );
-}
-
-export function startWebhookWorker(db: Database, logger: Logger): () => void {
-    const interval = setInterval(() => {
-        deliverPendingWebhooks(db, logger).catch((error: unknown) => {
-            logger.error({ error }, 'Webhook delivery worker failed');
-        });
-    }, getConfig().WEBHOOK_WORKER_INTERVAL_MS);
-    interval.unref();
-    return () => clearInterval(interval);
+    const rejected = publications.filter(
+        (publication) => publication.status === 'rejected'
+    );
+    if (rejected.length > 0) {
+        logger.warn(
+            { failed: rejected.length, total: publications.length },
+            'Some webhook outbox rows could not be reconciled with BullMQ'
+        );
+    }
 }

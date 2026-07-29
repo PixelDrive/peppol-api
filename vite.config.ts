@@ -13,13 +13,17 @@ export default defineConfig({
         outDir: 'dist',
         target: 'node20',
         rollupOptions: {
-            input: 'src/index.ts',
+            input: {
+                index: 'src/index.ts',
+                worker: 'src/workers/index.ts',
+            },
             external: (id) =>
                 !id.startsWith('.') &&
                 !id.startsWith('/') &&
-                id !== 'src/index.ts',
+                id !== 'src/index.ts' &&
+                id !== 'src/workers/index.ts',
             output: {
-                entryFileNames: 'index.mjs',
+                entryFileNames: '[name].mjs',
                 format: 'esm',
             },
         },

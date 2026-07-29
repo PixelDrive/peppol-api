@@ -95,7 +95,7 @@ app.get('/openapi.json', async (context) => {
         info: {
             title: 'Provider-agnostic Peppol API',
             description:
-                'Multi-tenant Peppol abstraction with Belgian EndpointID isolation, KoSIT validation and signed webhooks.',
+                'Multi-tenant Peppol abstraction with Belgian EndpointID isolation, SML/SMP participant discovery, KoSIT validation and signed webhooks.',
             version: '0.1.0',
         },
         servers: [{ url: '/api' }],
