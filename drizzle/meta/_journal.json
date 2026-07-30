@@ -15,6 +15,13 @@
       "when": 1785368513770,
       "tag": "0001_eminent_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785371510357,
+      "tag": "0002_sloppy_nocturne",
+      "breakpoints": true
     }
   ]
 }

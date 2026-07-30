@@ -14,27 +14,28 @@ export const getMe = enterpriseProcedure
                 id: enterpriseEndpoints.id,
                 scheme: enterpriseEndpoints.scheme,
                 value: enterpriseEndpoints.value,
+                networkRegistrationStatus:
+                    enterpriseEndpoints.networkRegistrationStatus,
+                registrationProvider: enterpriseEndpoints.registrationProvider,
+                providerRegistrationId:
+                    enterpriseEndpoints.providerRegistrationId,
+                registeredAt: enterpriseEndpoints.registeredAt,
+                registrationAttemptedAt:
+                    enterpriseEndpoints.registrationAttemptedAt,
+                registrationError: enterpriseEndpoints.registrationError,
                 createdAt: enterpriseEndpoints.createdAt,
             })
             .from(enterpriseEndpoints)
             .where(eq(enterpriseEndpoints.enterpriseId, enterprise.id));
         return {
             ...enterprise,
-            participantIdentifiers: endpoints.map(
-                ({ id, scheme, value, createdAt }) => ({
-                    id,
-                    scheme,
-                    value,
-                    canonical: `${scheme}:${value}`,
-                    createdAt,
-                })
-            ),
-            endpoints: endpoints.map(({ id, scheme, value, createdAt }) => ({
-                id,
-                scheme,
-                value,
-                canonical: `${scheme}:${value}`,
-                createdAt,
+            participantIdentifiers: endpoints.map((endpoint) => ({
+                ...endpoint,
+                canonical: `${endpoint.scheme}:${endpoint.value}`,
+            })),
+            endpoints: endpoints.map((endpoint) => ({
+                ...endpoint,
+                canonical: `${endpoint.scheme}:${endpoint.value}`,
             })),
         };
     });

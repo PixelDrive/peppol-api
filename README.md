@@ -102,9 +102,81 @@ This example accepts documents addressed to both `0208:0732788874` and
 `9925:BE0732788874` and sends notifications to the same webhooks. Outgoing
 documents may also use either identifier as the supplier identifier.
 
-Registering an identifier in this API does not automatically publish it on the
-Peppol network. Each identifier must also be enabled by the selected access
-point and published through the SML/SMP.
+Adding a local identifier does not automatically publish it on the Peppol
+network. Network registration is an explicit administrator operation.
+
+## Peppol network registration
+
+Administrators can publish each locally owned participant through the
+enterprise's configured provider. Provider credentials remain optional at
+startup; these operations return `PRECONDITION_FAILED` at runtime when the
+selected enterprise has no usable provider credentials.
+
+Register or update the participant and its business card:
+
+```http
+POST /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}/network-registration
+```
+
+```json
+{
+    "countryCode": "BE",
+    "businessCard": {
+        "name": "Example SRL",
+        "language": "en",
+        "websiteUrls": ["https://example.com"],
+        "contacts": [
+            {
+                "type": "billing",
+                "name": "Billing team",
+                "email": "billing@example.com"
+            }
+        ]
+    },
+    "publishToDirectory": true
+}
+```
+
+The operation creates the participant and complete business card through
+Dokapi. When the participant already belongs to the same Dokapi client, the
+business card is updated instead. `publishToDirectory` also asks Dokapi to push
+the card to the Peppol Directory. Dokapi may return partial success when the SMP
+participant was created but its business card failed; this is persisted as
+`PARTIAL` rather than incorrectly reporting the participant as absent.
+
+Register a document type and process that the participant can receive:
+
+```http
+POST /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}/network-services
+```
+
+```json
+{
+    "documentTypeIdentifier": "urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1",
+    "processIdentifier": "urn:fdc:peppol.eu:2017:poacc:billing:01:1.0"
+}
+```
+
+The default schemes are `busdox-docid-qns` for document types and
+`cenbii-procid-ubl` for processes. They can be overridden with
+`documentTypeScheme` and `processScheme`.
+
+Other lifecycle operations:
+
+- `GET /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}/network-registration`
+  refreshes registration status from the provider.
+- `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}/network-services`
+  removes a document type registration.
+- `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}/network-registration`
+  removes the participant from the provider while retaining its local
+  identifier.
+
+The local states are `UNKNOWN`, `NOT_REGISTERED`, `REGISTERING`, `REGISTERED`,
+`PARTIAL`, `DEREGISTERING` and `FAILED`. Identifiers start as `UNKNOWN` until
+their state is checked against the provider. A local identifier cannot be
+deleted until its provider registration has been confirmed absent or removed.
+After registration, SML/SMP and Peppol Directory propagation may take time;
+Dokapi notes that public lookup can take up to one hour.
 
 ## Enterprise API
 

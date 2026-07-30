@@ -35,6 +35,18 @@ export const webhookDeliveryStatusEnum = pgEnum('webhook_delivery_status', [
     'DELIVERED',
     'FAILED',
 ]);
+export const participantRegistrationStatusEnum = pgEnum(
+    'participant_registration_status',
+    [
+        'UNKNOWN',
+        'NOT_REGISTERED',
+        'REGISTERING',
+        'REGISTERED',
+        'PARTIAL',
+        'DEREGISTERING',
+        'FAILED',
+    ]
+);
 
 export const adminUsers = pgTable(
     'admin_users',
@@ -108,6 +120,21 @@ export const enterpriseEndpoints = pgTable(
             .references(() => enterprises.id, { onDelete: 'cascade' }),
         scheme: text('scheme').notNull(),
         value: text('value').notNull(),
+        networkRegistrationStatus: participantRegistrationStatusEnum(
+            'network_registration_status'
+        )
+            .notNull()
+            .default('UNKNOWN'),
+        registrationProvider: providerEnum('registration_provider'),
+        providerRegistrationId: text('provider_registration_id'),
+        registrationDetails: jsonb('registration_details').$type<
+            Record<string, unknown>
+        >(),
+        registeredAt: timestamp('registered_at', { withTimezone: true }),
+        registrationAttemptedAt: timestamp('registration_attempted_at', {
+            withTimezone: true,
+        }),
+        registrationError: text('registration_error'),
         createdAt: timestamp('created_at', { withTimezone: true })
             .notNull()
             .defaultNow(),

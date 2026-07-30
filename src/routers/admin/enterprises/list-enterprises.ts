@@ -23,12 +23,9 @@ export const listEnterprises = adminProcedure
                     .filter(
                         ({ enterpriseId }) => enterpriseId === enterprise.id
                     )
-                    .map(({ id, scheme, value, createdAt }) => ({
-                        id,
-                        scheme,
-                        value,
-                        canonical: `${scheme}:${value}`,
-                        createdAt,
+                    .map((participantIdentifier) => ({
+                        ...participantIdentifier,
+                        canonical: `${participantIdentifier.scheme}:${participantIdentifier.value}`,
                     }));
                 return {
                     ...enterprise,

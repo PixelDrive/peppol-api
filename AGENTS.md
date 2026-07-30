@@ -41,6 +41,13 @@
   An enterprise may own several identifiers. Belgian enterprise-number
   identifiers use `0208:<10-digit BCE/KBO number>` and Belgian VAT identifiers
   use `9925:BE<10-digit VAT number>`.
+- Local participant ownership and provider network registration are separate
+  states. Network changes must go through `PeppolProvider`, persist their state
+  on the participant identifier and remain recoverable through a provider
+  status refresh after an interrupted request.
+- Do not delete a local participant identifier until its network registration
+  is confirmed absent. Document/process capabilities are registered separately
+  from the participant service group and business card.
 - Parse the supplier EndpointID from the final UBL XML and call
   `assertSenderBelongsToEnterprise` before validation or provider submission.
 - Participant lookup failures must distinguish an absent DNS record from SML

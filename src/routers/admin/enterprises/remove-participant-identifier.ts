@@ -22,7 +22,11 @@ export const removeParticipantIdentifier = adminProcedure
         await db.transaction(
             async (transaction) => {
                 const [target] = await transaction
-                    .select({ id: enterpriseEndpoints.id })
+                    .select({
+                        id: enterpriseEndpoints.id,
+                        networkRegistrationStatus:
+                            enterpriseEndpoints.networkRegistrationStatus,
+                    })
                     .from(enterpriseEndpoints)
                     .where(
                         and(
@@ -39,6 +43,12 @@ export const removeParticipantIdentifier = adminProcedure
                     .limit(1);
                 if (!target) {
                     throw new ORPCError('NOT_FOUND');
+                }
+                if (target.networkRegistrationStatus !== 'NOT_REGISTERED') {
+                    throw new ORPCError('PRECONDITION_FAILED', {
+                        message:
+                            'Confirm or remove the participant network registration before deleting its local identifier.',
+                    });
                 }
                 const identifiers = await transaction
                     .select({ id: enterpriseEndpoints.id })

@@ -71,3 +71,10 @@
       and globally unambiguous inbound routing are covered by checks and tests;
       Dokapi now receives the sender country from the UBL instead of a Belgian
       constant.
+- [x] Manage participant, business-card and document-service registration on
+      the Peppol network through the provider abstraction.
+      Files: `src/providers/`, `src/routers/admin/enterprises/`,
+      `src/db/schema.ts`, `drizzle/0002_sloppy_nocturne.sql`.
+      Validation: Dokapi request mapping, partial registration handling and
+      registration input defaults are covered by unit tests; status is
+      persisted and refreshable after interrupted operations.
