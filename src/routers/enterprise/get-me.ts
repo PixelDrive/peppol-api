@@ -11,17 +11,30 @@ export const getMe = enterpriseProcedure
     .handler(async ({ context: { db, enterprise } }) => {
         const endpoints = await db
             .select({
+                id: enterpriseEndpoints.id,
                 scheme: enterpriseEndpoints.scheme,
                 value: enterpriseEndpoints.value,
+                createdAt: enterpriseEndpoints.createdAt,
             })
             .from(enterpriseEndpoints)
             .where(eq(enterpriseEndpoints.enterpriseId, enterprise.id));
         return {
             ...enterprise,
-            endpoints: endpoints.map(({ scheme, value }) => ({
+            participantIdentifiers: endpoints.map(
+                ({ id, scheme, value, createdAt }) => ({
+                    id,
+                    scheme,
+                    value,
+                    canonical: `${scheme}:${value}`,
+                    createdAt,
+                })
+            ),
+            endpoints: endpoints.map(({ id, scheme, value, createdAt }) => ({
+                id,
                 scheme,
                 value,
                 canonical: `${scheme}:${value}`,
+                createdAt,
             })),
         };
     });

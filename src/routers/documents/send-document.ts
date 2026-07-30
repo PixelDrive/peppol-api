@@ -16,7 +16,7 @@ export const sendDocument = enterpriseProcedure
         path: '/send',
         summary: 'Send a UBL document over Peppol',
         description:
-            'Authorizes the supplier EndpointID, validates with KoSIT, then delegates transport to the configured provider.',
+            'Authorizes the supplier participant identifier, derives the sender country from the final XML, validates with KoSIT, then delegates transport to the configured provider.',
     })
     .input(
         z.object({
@@ -84,6 +84,7 @@ export const sendDocument = enterpriseProcedure
                 type: metadata.type,
                 senderEndpoint: metadata.senderEndpoint,
                 receiverEndpoint: metadata.receiverEndpoint,
+                senderCountryCode: metadata.senderCountryCode,
                 externalReference: document!.id,
             });
             await db

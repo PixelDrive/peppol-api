@@ -3,6 +3,7 @@ export type ProviderSendInput = {
     type: 'INVOICE' | 'CREDIT_NOTE';
     senderEndpoint: string;
     receiverEndpoint: string;
+    senderCountryCode: string;
     externalReference: string;
 };
 

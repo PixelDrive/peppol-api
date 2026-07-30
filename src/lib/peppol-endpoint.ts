@@ -1,4 +1,5 @@
 const belgianEnterpriseNumberPattern = /^\d{10}$/;
+const belgianVatNumberPattern = /^BE\d{10}$/;
 
 /**
  * Normalizes a Belgian BCE/KBO or VAT number to its 10-digit enterprise number.
@@ -30,6 +31,29 @@ export function toBelgianPeppolEndpoint(value: string): {
         scheme: '0208',
         value: enterpriseNumber,
         canonical: `0208:${enterpriseNumber}`,
+    };
+}
+
+/**
+ * Returns the canonical Peppol participant identifier for a Belgian VAT
+ * number. Scheme 9925 is distinct from the 0208 enterprise-number scheme.
+ */
+export function toBelgianVatPeppolEndpoint(value: string): {
+    scheme: '9925';
+    value: string;
+    canonical: string;
+} {
+    const compact = value.replaceAll(/[\s.-]/g, '').toUpperCase();
+    if (!belgianVatNumberPattern.test(compact)) {
+        throw new Error(
+            'Belgian VAT participant identifier must contain BE followed by exactly 10 digits'
+        );
+    }
+    const normalizedValue = compact.toLowerCase();
+    return {
+        scheme: '9925',
+        value: normalizedValue,
+        canonical: `9925:${normalizedValue}`,
     };
 }
 
@@ -66,7 +90,9 @@ export function normalizePeppolParticipantIdentifier(value: string): {
     const normalizedValue =
         scheme === '0208'
             ? normalizeBelgianEnterpriseNumber(rawValue!)
-            : rawValue!.toLowerCase();
+            : scheme === '9925'
+              ? toBelgianVatPeppolEndpoint(rawValue!).value
+              : rawValue!.toLowerCase();
     return {
         scheme: scheme!,
         value: normalizedValue,

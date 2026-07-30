@@ -58,10 +58,21 @@ export const getEnterprise = adminProcedure
 
         return {
             ...enterprise,
-            endpoints: endpoints.map(({ scheme, value }) => ({
+            participantIdentifiers: endpoints.map(
+                ({ id, scheme, value, createdAt }) => ({
+                    id,
+                    scheme,
+                    value,
+                    canonical: `${scheme}:${value}`,
+                    createdAt,
+                })
+            ),
+            endpoints: endpoints.map(({ id, scheme, value, createdAt }) => ({
+                id,
                 scheme,
                 value,
                 canonical: `${scheme}:${value}`,
+                createdAt,
             })),
             apiKeys,
             configuredProviders: credentials,

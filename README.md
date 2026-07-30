@@ -14,12 +14,20 @@ durable.
 - Les identifiants Dokapi propres à une entreprise sont chiffrés en
   AES-256-GCM dans PostgreSQL. Une entreprise peut aussi utiliser les
   identifiants Dokapi globaux fournis par l’environnement.
-- Pour une entreprise belge, l’EndpointID Peppol est toujours le numéro BCE/KBO
-  normalisé : `0208:0732788875`. Un numéro de TVA `BE0732788875` est accepté à
-  la création uniquement pour en déduire ce numéro d’entreprise.
+- Chaque entreprise possède un identifiant participant Peppol principal et
+  peut en enregistrer plusieurs autres. Ils sont uniques globalement dans
+  l’application afin qu’un document entrant soit toujours associé à un seul
+  tenant et à ses webhooks.
+- Les identifiants sont internationaux et utilisent la forme
+  `<scheme ISO 6523>:<value>`. En Belgique, le numéro BCE/KBO utilise
+  `0208:0732788875` et le numéro de TVA peut utiliser
+  `9925:BE0732788875`.
 - Avant chaque validation ou envoi, l’API parse le XML final et compare
-  l’EndpointID du fournisseur à celui de l’entreprise authentifiée. Une
-  entreprise ne peut donc jamais émettre au nom d’une autre.
+  l’identifiant participant du fournisseur à tous ceux de l’entreprise
+  authentifiée. Une entreprise peut émettre avec n’importe lequel de ses
+  identifiants enregistrés, mais jamais au nom d’une autre.
+- Le pays C1 transmis au provider est celui de l’adresse du fournisseur dans le
+  XML final ; il n’est pas forcé à `BE`.
 - La validation passe par un service KoSIT compatible, indépendamment du
   provider.
 
@@ -66,23 +74,40 @@ s’il n’existe pas. Une modification du mot de passe dans l’environnement l
 met à jour au redémarrage.
 
 1. `POST /api/admin/auth/login` retourne un bearer token opaque.
-2. `POST /api/admin/enterprises` crée une entreprise, dérive son EndpointID
-   `0208` et retourne sa première clé API une seule fois.
+2. `POST /api/admin/enterprises` crée une entreprise avec son identifiant
+   participant principal et ses identifiants additionnels, puis retourne sa
+   première clé API une seule fois. Pour compatibilité, omettre `participantId`
+   et fournir un numéro BCE ou TVA belge dérive un identifiant `0208`.
 3. `PUT /api/admin/enterprises/{enterpriseId}/provider` bascule entre
    credentials Dokapi globaux et credentials propres chiffrés.
 4. Les endpoints `/api/admin/enterprises/{enterpriseId}/api-keys` permettent
    la rotation et la révocation des clés.
+5. `POST /api/admin/enterprises/{enterpriseId}/participant-identifiers` ajoute
+   un identifiant. `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}`
+   le retire ; le dernier identifiant ne peut pas être supprimé.
 
 Exemple de création :
 
 ```json
 {
     "name": "Example SRL",
-    "vatNumber": "BE0732788875",
+    "participantId": "0208:0732788874",
+    "additionalParticipantIds": ["9925:BE0732788874"],
+    "companyNumber": "0732788874",
+    "vatNumber": "BE0732788874",
     "provider": "DOKAPI",
     "useGlobalProviderCredentials": true
 }
 ```
+
+L’exemple accepte alors les documents destinés à
+`0208:0732788874` **et** `9925:BE0732788874` et les notifie sur les mêmes
+webhooks. Les documents sortants peuvent également utiliser l’un ou l’autre
+comme identifiant fournisseur.
+
+L’enregistrement dans cette API ne publie pas automatiquement l’identifiant sur
+le réseau Peppol : chaque identifiant doit aussi être activé chez l’access point
+utilisé et annoncé dans le SML/SMP.
 
 ## API entreprise
 
@@ -102,16 +127,18 @@ Passer la clé dans `x-api-key`.
 - `/api/webhook-endpoints` : configuration et historique des webhooks clients.
 
 Les documents entrants signalés par Dokapi sont téléchargés, vérifiés contre
-l’EndpointID destinataire, validés avec KoSIT, persistés puis notifiés à
-l’entreprise.
+l’identifiant destinataire enregistré, validés avec KoSIT, persistés puis
+notifiés à l’entreprise qui possède cet identifiant. Tous les identifiants d’une
+même entreprise partagent donc la même configuration de webhooks.
 
 ## Lookup des participants Peppol
 
 Le lookup est indépendant des providers configurés. Il applique le mécanisme
 officiel SML/SMP actuellement en vigueur :
 
-1. normalisation du Participant Identifier, avec support des formes belges BCE,
-   TVA et `0208:<BCE>` ;
+1. normalisation du Participant Identifier international ; les formes belges
+   abrégées BCE/TVA restent acceptées comme raccourci vers `0208:<BCE>`, tandis
+   qu’un identifiant TVA explicite utilise `9925:BE<TVA>` ;
 2. calcul du nom DNS avec SHA-256 et Base32 ;
 3. résolution du record U-NAPTR `Meta:SMP` ;
 4. lecture HTTPS du `ServiceGroup` sur le SMP découvert ;

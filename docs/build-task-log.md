@@ -17,7 +17,7 @@
       encryption.
       Files: `src/auth/`, `src/lib/crypto.ts`, `src/lib/api-keys.ts`.
       Validation: encryption and API-key unit tests.
-- [x] Enforce Belgian `0208:<BCE>` EndpointID ownership from the final XML.
+- [x] Enforce participant identifier ownership from the final XML.
       Files: `src/lib/peppol-endpoint.ts`, `src/peppol/authorization.ts`.
       Validation: EndpointID normalization unit tests.
 - [x] Implement UBL generation/parsing, independent KoSIT validation and the
@@ -61,3 +61,13 @@
       tests. A separate network smoke test verifies `0208:0732788874` against
       the production SML/SMP without making the default test suite depend on
       Internet access.
+- [x] Generalize enterprises to one primary and multiple additional Peppol
+      participant identifiers, including Belgian `0208` enterprise-number and
+      `9925` VAT identifiers.
+      Files: `src/lib/peppol-endpoint.ts`, `src/db/schema.ts`,
+      `src/routers/admin/enterprises/`, `src/routes/provider-webhooks/dokapi.ts`,
+      `src/providers/dokapi.ts`.
+      Validation: participant normalization, creation input, sender ownership
+      and globally unambiguous inbound routing are covered by checks and tests;
+      Dokapi now receives the sender country from the UBL instead of a Belgian
+      constant.

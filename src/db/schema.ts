@@ -114,7 +114,6 @@ export const enterpriseEndpoints = pgTable(
     },
     (table) => [
         uniqueIndex('enterprise_endpoints_identity_unique').on(
-            table.enterpriseId,
             table.scheme,
             table.value
         ),

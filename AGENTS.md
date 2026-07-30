@@ -37,8 +37,10 @@
 - Enterprise API key secrets and administrator passwords are scrypt hashes.
 - Provider credentials and client webhook secrets are AES-256-GCM encrypted.
 - Never log or return decrypted credentials.
-- Belgian EndpointID is always `0208:<10-digit BCE/KBO number>`. A Belgian VAT
-  number may be accepted as input only to derive the BCE number.
+- Participant identifiers are generic and globally unique across enterprises.
+  An enterprise may own several identifiers. Belgian enterprise-number
+  identifiers use `0208:<10-digit BCE/KBO number>` and Belgian VAT identifiers
+  use `9925:BE<10-digit VAT number>`.
 - Parse the supplier EndpointID from the final UBL XML and call
   `assertSenderBelongsToEnterprise` before validation or provider submission.
 - Participant lookup failures must distinguish an absent DNS record from SML

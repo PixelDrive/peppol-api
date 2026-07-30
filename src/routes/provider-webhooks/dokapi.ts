@@ -11,6 +11,7 @@ import {
 } from '../../db/schema';
 import { secretsEqual } from '../../lib/crypto';
 import { logger } from '../../lib/logger';
+import { normalizePeppolParticipantIdentifier } from '../../lib/peppol-endpoint';
 import { parseUblDocument } from '../../peppol/xml';
 import { validateWithKosit } from '../../peppol/validation';
 import { emitWebhookEvent } from '../../webhooks/delivery';
@@ -109,20 +110,19 @@ async function handleOutgoingFeedback(
 async function handleIncomingDocument(
     payload: z.infer<typeof dokapiEventSchema>
 ): Promise<void> {
-    const receiver = identifierValue(payload.body, 'receiver');
-    const sender = identifierValue(payload.body, 'sender');
+    const rawReceiver = identifierValue(payload.body, 'receiver');
+    const rawSender = identifierValue(payload.body, 'sender');
     const presignedUrl =
         nestedString(payload.body, 'presignedUrl') ??
         nestedString(payload.body, 'preSignedDownloadUrl');
-    if (!receiver || !sender || !presignedUrl) {
+    if (!rawReceiver || !rawSender || !presignedUrl) {
         throw new Error(
             'Incoming Dokapi event is missing sender, receiver or presignedUrl'
         );
     }
 
-    const separator = receiver.indexOf(':');
-    const scheme = receiver.slice(0, separator);
-    const value = receiver.slice(separator + 1);
+    const receiver = normalizePeppolParticipantIdentifier(rawReceiver);
+    const sender = normalizePeppolParticipantIdentifier(rawSender);
     const [target] = await db
         .select({ endpoint: enterpriseEndpoints, enterprise: enterprises })
         .from(enterpriseEndpoints)
@@ -135,13 +135,15 @@ async function handleIncomingDocument(
         )
         .where(
             and(
-                eq(enterpriseEndpoints.scheme, scheme),
-                eq(enterpriseEndpoints.value, value)
+                eq(enterpriseEndpoints.scheme, receiver.scheme),
+                eq(enterpriseEndpoints.value, receiver.value)
             )
         )
         .limit(1);
     if (!target) {
-        throw new Error(`No enterprise owns receiver EndpointID ${receiver}`);
+        throw new Error(
+            `No enterprise owns receiver participant identifier ${receiver.canonical}`
+        );
     }
 
     const response = await fetch(presignedUrl, {
@@ -154,9 +156,12 @@ async function handleIncomingDocument(
     }
     const ublXml = await response.text();
     const metadata = parseUblDocument(ublXml);
-    if (metadata.receiverEndpoint !== receiver) {
+    if (
+        metadata.receiverEndpoint !== receiver.canonical ||
+        metadata.senderEndpoint !== sender.canonical
+    ) {
         throw new Error(
-            'Incoming XML receiver EndpointID differs from the authenticated Dokapi event'
+            'Incoming XML participant identifiers differ from the authenticated Dokapi event'
         );
     }
 

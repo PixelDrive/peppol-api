@@ -27,6 +27,7 @@ export type ParsedPeppolDocument = {
     type: 'INVOICE' | 'CREDIT_NOTE';
     senderEndpoint: string;
     receiverEndpoint: string;
+    senderCountryCode: string;
     documentId: string;
 };
 
@@ -64,6 +65,7 @@ export function parseUblDocument(xml: string): ParsedPeppolDocument {
         type,
         senderEndpoint: canonicalEndpoint(document.seller.endPoint),
         receiverEndpoint: canonicalEndpoint(document.buyer.endPoint),
+        senderCountryCode: document.seller.address.country.toUpperCase(),
         documentId: document.ID,
     };
 }

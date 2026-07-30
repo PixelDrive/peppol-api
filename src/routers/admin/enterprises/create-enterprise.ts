@@ -1,3 +1,4 @@
+import { ORPCError } from '@orpc/server';
 import { encrypt } from '../../../lib/crypto';
 import { adminProcedure } from '../../../auth/admin';
 import {
@@ -7,8 +8,10 @@ import {
     providerCredentials,
 } from '../../../db/schema';
 import { generateApiKey } from '../../../lib/api-keys';
-import { toBelgianPeppolEndpoint } from '../../../lib/peppol-endpoint';
-import { enterpriseInputSchema } from './schemas';
+import {
+    enterpriseInputSchema,
+    resolveEnterpriseParticipantIdentifiers,
+} from './schemas';
 
 export const createEnterprise = adminProcedure
     .route({
@@ -16,13 +19,13 @@ export const createEnterprise = adminProcedure
         path: '/',
         summary: 'Create an enterprise',
         description:
-            'Creates an isolated enterprise, its Belgian Peppol EndpointID and its first API key.',
+            'Creates an isolated enterprise, registers its primary and additional Peppol participant identifiers, and returns its first API key.',
     })
     .input(enterpriseInputSchema)
     .handler(async ({ context: { db }, input }) => {
-        const endpoint = toBelgianPeppolEndpoint(
-            input.companyNumber ?? input.vatNumber!
-        );
+        const participantIdentifiers =
+            resolveEnterpriseParticipantIdentifiers(input);
+        const primaryParticipantIdentifier = participantIdentifiers[0]!;
         const generatedKey = await generateApiKey();
 
         const enterprise = await db.transaction(async (transaction) => {
@@ -30,21 +33,41 @@ export const createEnterprise = adminProcedure
                 .insert(enterprises)
                 .values({
                     name: input.name,
-                    companyNumber: endpoint.value,
-                    vatNumber: input.vatNumber
-                        ? `BE${endpoint.value}`
-                        : undefined,
+                    companyNumber:
+                        input.companyNumber ??
+                        (input.participantId
+                            ? undefined
+                            : primaryParticipantIdentifier.value),
+                    vatNumber:
+                        input.vatNumber && !input.participantId
+                            ? `BE${primaryParticipantIdentifier.value}`
+                            : input.vatNumber,
                     provider: input.provider,
                     useGlobalProviderCredentials:
                         input.useGlobalProviderCredentials,
                 })
                 .returning();
 
-            await transaction.insert(enterpriseEndpoints).values({
-                enterpriseId: created!.id,
-                scheme: endpoint.scheme,
-                value: endpoint.value,
-            });
+            const insertedParticipantIdentifiers = await transaction
+                .insert(enterpriseEndpoints)
+                .values(
+                    participantIdentifiers.map(({ scheme, value }) => ({
+                        enterpriseId: created!.id,
+                        scheme,
+                        value,
+                    }))
+                )
+                .onConflictDoNothing()
+                .returning({ id: enterpriseEndpoints.id });
+            if (
+                insertedParticipantIdentifiers.length !==
+                participantIdentifiers.length
+            ) {
+                throw new ORPCError('CONFLICT', {
+                    message:
+                        'At least one participant identifier is already registered to another enterprise.',
+                });
+            }
             await transaction.insert(enterpriseApiKeys).values({
                 enterpriseId: created!.id,
                 prefix: generatedKey.prefix,
@@ -67,7 +90,8 @@ export const createEnterprise = adminProcedure
         return {
             enterprise: {
                 ...enterprise,
-                endpointId: endpoint.canonical,
+                endpointId: primaryParticipantIdentifier.canonical,
+                participantIdentifiers,
             },
             apiKey: generatedKey.apiKey,
             warning:

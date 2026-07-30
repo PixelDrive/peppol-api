@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { ORPCError } from '@orpc/server';
 import type { Database } from '../db/client';
 import { enterpriseEndpoints } from '../db/schema';
+import { normalizePeppolParticipantIdentifier } from '../lib/peppol-endpoint';
 
 /**
  * Prevents tenant impersonation by checking the supplier EndpointID extracted
@@ -12,9 +13,17 @@ export async function assertSenderBelongsToEnterprise(
     enterpriseId: string,
     senderEndpoint: string
 ): Promise<void> {
-    const separator = senderEndpoint.indexOf(':');
-    const scheme = senderEndpoint.slice(0, separator);
-    const value = senderEndpoint.slice(separator + 1);
+    let participantIdentifier;
+    try {
+        participantIdentifier =
+            normalizePeppolParticipantIdentifier(senderEndpoint);
+    } catch (error) {
+        throw new ORPCError('BAD_REQUEST', {
+            message: 'Supplier participant identifier is invalid.',
+            cause: error,
+        });
+    }
+    const { scheme, value, canonical } = participantIdentifier;
 
     const [allowed] = await db
         .select({ id: enterpriseEndpoints.id })
@@ -30,9 +39,7 @@ export async function assertSenderBelongsToEnterprise(
 
     if (!allowed) {
         throw new ORPCError('FORBIDDEN', {
-            message:
-                `Supplier EndpointID "${senderEndpoint}" does not belong to the authenticated enterprise. ` +
-                'Belgian senders must use their 0208 BCE/KBO enterprise number.',
+            message: `Supplier participant identifier "${canonical}" is not registered for the authenticated enterprise.`,
         });
     }
 }

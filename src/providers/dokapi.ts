@@ -84,7 +84,7 @@ export class DokapiProvider implements PeppolProvider {
                 body: JSON.stringify({
                     sender: { value: input.senderEndpoint },
                     receiver: { value: input.receiverEndpoint },
-                    c1CountryCode: 'BE',
+                    c1CountryCode: input.senderCountryCode,
                     documentTypeIdentifier: {
                         value:
                             input.type === 'INVOICE'
