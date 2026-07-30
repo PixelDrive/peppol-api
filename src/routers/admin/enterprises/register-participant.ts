@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints } from '../../../db/schema';
 import { getProvider } from '../../../providers/factory';
+import { registerParticipantOutputSchema } from '../../output-schemas';
 import {
     getEnterpriseParticipant,
     providerErrorMessage,
@@ -20,6 +21,7 @@ export const registerParticipant = adminProcedure
             'Registers the locally owned participant through the configured provider, creates or updates its business card and optionally publishes it to the Peppol Directory.',
     })
     .input(participantRegistrationInputSchema)
+    .output(registerParticipantOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const target = await getEnterpriseParticipant(
             db,

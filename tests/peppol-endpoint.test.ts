@@ -32,12 +32,10 @@ describe('Belgian Peppol EndpointID', () => {
 
 describe('generic Peppol participant identifiers', () => {
     it('normalizes an international participant identifier', () => {
-        expect(
-            normalizePeppolParticipantIdentifier('0088:1234567890123')
-        ).toEqual({
+        expect(normalizePeppolParticipantIdentifier('0088:123ABC')).toEqual({
             scheme: '0088',
-            value: '1234567890123',
-            canonical: '0088:1234567890123',
+            value: '123abc',
+            canonical: '0088:123abc',
         });
     });
 

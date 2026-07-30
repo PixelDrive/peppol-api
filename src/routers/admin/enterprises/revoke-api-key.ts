@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseApiKeys } from '../../../db/schema';
+import { successOutputSchema } from '../../output-schemas';
 
 export const revokeApiKey = adminProcedure
     .route({
@@ -15,6 +16,7 @@ export const revokeApiKey = adminProcedure
             apiKeyId: z.uuid(),
         })
     )
+    .output(successOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         await db
             .update(enterpriseApiKeys)

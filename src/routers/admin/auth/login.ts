@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { base } from '../../../auth/base';
 import { createAdminSession } from '../../../auth/admin';
+import { adminLoginOutputSchema } from '../../output-schemas';
 
 export const login = base
     .route({
@@ -16,6 +17,7 @@ export const login = base
             password: z.string().min(1),
         })
     )
+    .output(adminLoginOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const session = await createAdminSession(
             db,

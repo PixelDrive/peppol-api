@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { enterpriseEndpoints } from '../../db/schema';
+import { getMeOutputSchema } from '../output-schemas';
 
 export const getMe = enterpriseProcedure
     .route({
@@ -8,6 +9,7 @@ export const getMe = enterpriseProcedure
         path: '/me',
         summary: 'Get authenticated enterprise',
     })
+    .output(getMeOutputSchema)
     .handler(async ({ context: { db, enterprise } }) => {
         const endpoints = await db
             .select({

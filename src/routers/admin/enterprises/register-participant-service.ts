@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 import { adminProcedure } from '../../../auth/admin';
 import { getProvider } from '../../../providers/factory';
+import { registerParticipantServiceOutputSchema } from '../../output-schemas';
 import {
     getEnterpriseParticipant,
     throwProviderFailure,
@@ -17,6 +18,7 @@ export const registerParticipantService = adminProcedure
             'Publishes a document type and process pair for a registered participant through the configured provider.',
     })
     .input(participantServiceInputSchema)
+    .output(registerParticipantServiceOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const target = await getEnterpriseParticipant(
             db,

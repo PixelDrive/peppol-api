@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { adminProcedure } from '../../../auth/admin';
 import { adminSessions } from '../../../db/schema';
+import { successOutputSchema } from '../../output-schemas';
 
 export const logout = adminProcedure
     .route({
@@ -8,6 +9,7 @@ export const logout = adminProcedure
         path: '/logout',
         summary: 'Close the current administrator session',
     })
+    .output(successOutputSchema)
     .handler(async ({ context: { db, session } }) => {
         await db.delete(adminSessions).where(eq(adminSessions.id, session.id));
         return { success: true };

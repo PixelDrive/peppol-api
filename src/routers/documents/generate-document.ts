@@ -5,6 +5,7 @@ import {
     parseUblDocument,
     structuredDocumentSchema,
 } from '../../peppol/xml';
+import { generateDocumentOutputSchema } from '../output-schemas';
 
 export const generateDocument = enterpriseProcedure
     .route({
@@ -15,6 +16,7 @@ export const generateDocument = enterpriseProcedure
             'Builds an invoice or credit note with peppol-toolkit and verifies its supplier EndpointID.',
     })
     .input(structuredDocumentSchema)
+    .output(generateDocumentOutputSchema)
     .handler(async ({ context: { db, enterprise }, input }) => {
         const ublXml = generateUblXml(input);
         const metadata = parseUblDocument(ublXml);

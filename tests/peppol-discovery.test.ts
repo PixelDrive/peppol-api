@@ -104,16 +104,28 @@ describe('Peppol participant discovery', () => {
         );
     });
 
-    it('returns an unregistered participant when the SML has no DNS record', async () => {
-        const error = Object.assign(new Error('not found'), {
+    it('distinguishes an absent DNS record from an SML outage', async () => {
+        const notFound = Object.assign(new Error('not found'), {
             code: 'ENOTFOUND',
         });
         const result = await lookupPeppolParticipant('0208:0732788875', {
-            resolveNaptr: () => Promise.reject(error),
+            resolveNaptr: () => Promise.reject(notFound),
         });
 
         expect(result.registered).toBe(false);
         expect(result.smp).toBeNull();
         expect(result.documentTypes).toEqual([]);
+
+        const outage = Object.assign(new Error('temporary DNS failure'), {
+            code: 'ESERVFAIL',
+        });
+        await expect(
+            lookupPeppolParticipant('0208:0732788875', {
+                resolveNaptr: () => Promise.reject(outage),
+            })
+        ).rejects.toMatchObject({
+            name: 'PeppolDiscoveryError',
+            code: 'DNS_LOOKUP_FAILED',
+        });
     });
 });

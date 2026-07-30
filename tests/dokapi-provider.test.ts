@@ -6,7 +6,7 @@ describe('Dokapi provider', () => {
         vi.unstubAllGlobals();
     });
 
-    it('uses the sender country from the final UBL metadata', async () => {
+    it('maps final UBL metadata and uploads the exact XML', async () => {
         const fetchMock = vi
             .fn<typeof fetch>()
             .mockResolvedValueOnce(
@@ -32,8 +32,9 @@ describe('Dokapi provider', () => {
             baseUrl: 'https://dokapi.example/v1',
             tokenUrl: 'https://dokapi.example/oauth/token',
         });
+        const ublXml = '<Invoice id="exact-upload" />';
         const result = await provider.sendDocument({
-            ublXml: '<Invoice />',
+            ublXml,
             type: 'INVOICE',
             senderEndpoint: '0106:123456789',
             receiverEndpoint: '0208:0732788874',
@@ -49,6 +50,13 @@ describe('Dokapi provider', () => {
         expect(JSON.parse(String(reservationRequest?.body))).toMatchObject({
             sender: { value: '0106:123456789' },
             c1CountryCode: 'NL',
+        });
+        const uploadCall = fetchMock.mock.calls[2];
+        expect(uploadCall?.[0]).toBe('https://uploads.example/document.xml');
+        expect(uploadCall?.[1]).toMatchObject({
+            method: 'PUT',
+            headers: { 'content-type': 'application/xml' },
+            body: ublXml,
         });
     });
 
@@ -193,6 +201,76 @@ describe('Dokapi provider', () => {
             processIdentifier: {
                 scheme: 'cenbii-procid-ubl',
                 value: 'billing-process',
+            },
+        });
+    });
+
+    it('updates the business card when the participant is already registered', async () => {
+        const fetchMock = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(
+                Response.json({
+                    /* eslint-disable camelcase -- Dokapi OAuth wire names */
+                    access_token: 'existing-registration-token',
+                    expires_in: 300,
+                    /* eslint-enable camelcase */
+                })
+            )
+            .mockResolvedValueOnce(
+                Response.json({
+                    ulid: 'existing-registration-id',
+                    countryCode: 'BE',
+                })
+            )
+            .mockResolvedValueOnce(
+                Response.json({ message: 'business card updated' })
+            );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const provider = new DokapiProvider({
+            clientId: 'existing-participant-client',
+            clientSecret: 'secret',
+            baseUrl: 'https://dokapi.example/v1',
+            tokenUrl: 'https://dokapi.example/oauth/token',
+        });
+        const result = await provider.registerParticipant({
+            participantIdentifier: {
+                scheme: '0208',
+                value: '0732788874',
+                canonical: '0208:0732788874',
+            },
+            businessCard: {
+                name: 'Updated Example SRL',
+                countryCode: 'BE',
+            },
+            publishToDirectory: false,
+        });
+
+        expect(result).toMatchObject({
+            registered: true,
+            alreadyRegistered: true,
+            partial: false,
+            businessCardPublished: true,
+            directoryPublished: false,
+            providerRegistrationId: 'existing-registration-id',
+        });
+        const updateCall = fetchMock.mock.calls[2];
+        expect(String(updateCall?.[0])).toBe(
+            'https://dokapi.example/v1/participant-registrations/business-cards'
+        );
+        expect(updateCall?.[1]?.method).toBe('PUT');
+        expect(JSON.parse(String(updateCall?.[1]?.body))).toMatchObject({
+            participantIdentifier: {
+                scheme: 'iso6523-actorid-upis',
+                value: '0208:0732788874',
+            },
+            completeBusinessCard: {
+                businessEntity: [
+                    {
+                        name: [{ value: 'Updated Example SRL' }],
+                        countryCode: 'BE',
+                    },
+                ],
             },
         });
     });

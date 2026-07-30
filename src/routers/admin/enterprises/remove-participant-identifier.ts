@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints } from '../../../db/schema';
+import { successOutputSchema } from '../../output-schemas';
 
 export const removeParticipantIdentifier = adminProcedure
     .route({
@@ -18,6 +19,7 @@ export const removeParticipantIdentifier = adminProcedure
             participantIdentifierId: z.uuid(),
         })
     )
+    .output(successOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         await db.transaction(
             async (transaction) => {

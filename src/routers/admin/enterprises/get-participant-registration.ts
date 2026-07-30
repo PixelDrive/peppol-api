@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints } from '../../../db/schema';
 import { getProvider } from '../../../providers/factory';
+import { getParticipantRegistrationOutputSchema } from '../../output-schemas';
 import {
     getEnterpriseParticipant,
     providerErrorMessage,
@@ -19,6 +20,7 @@ export const getParticipantRegistration = adminProcedure
             'Refreshes the registration from the configured provider and returns both provider and locally persisted state.',
     })
     .input(participantRegistrationPathSchema)
+    .output(getParticipantRegistrationOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const target = await getEnterpriseParticipant(
             db,

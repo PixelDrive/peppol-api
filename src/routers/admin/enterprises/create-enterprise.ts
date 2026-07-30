@@ -8,6 +8,7 @@ import {
     providerCredentials,
 } from '../../../db/schema';
 import { generateApiKey } from '../../../lib/api-keys';
+import { createEnterpriseOutputSchema } from '../../output-schemas';
 import {
     enterpriseInputSchema,
     resolveEnterpriseParticipantIdentifiers,
@@ -22,6 +23,7 @@ export const createEnterprise = adminProcedure
             'Creates an isolated enterprise, registers its primary and additional Peppol participant identifiers, and returns its first API key.',
     })
     .input(enterpriseInputSchema)
+    .output(createEnterpriseOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const participantIdentifiers =
             resolveEnterpriseParticipantIdentifiers(input);

@@ -2,6 +2,7 @@ import { desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseApiKeys } from '../../../db/schema';
+import { listApiKeysOutputSchema } from '../../output-schemas';
 
 export const enterpriseApiKeySummarySelection = {
     id: enterpriseApiKeys.id,
@@ -21,6 +22,7 @@ export const listApiKeys = adminProcedure
             'Returns API key metadata for one enterprise without exposing key hashes or secret values.',
     })
     .input(z.object({ enterpriseId: z.uuid() }))
+    .output(listApiKeysOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const apiKeys = await db
             .select(enterpriseApiKeySummarySelection)

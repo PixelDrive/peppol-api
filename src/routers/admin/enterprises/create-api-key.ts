@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseApiKeys } from '../../../db/schema';
 import { generateApiKey } from '../../../lib/api-keys';
+import { createApiKeyOutputSchema } from '../../output-schemas';
 
 export const createApiKey = adminProcedure
     .route({
@@ -15,6 +16,7 @@ export const createApiKey = adminProcedure
             expiresAt: z.iso.datetime().optional(),
         })
     )
+    .output(createApiKeyOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const generated = await generateApiKey();
         const [apiKey] = await db

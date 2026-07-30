@@ -2,6 +2,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { webhookDeliveries, webhookEndpoints } from '../../db/schema';
+import { listWebhookDeliveriesOutputSchema } from '../output-schemas';
 
 export const listWebhookDeliveries = enterpriseProcedure
     .route({
@@ -14,8 +15,9 @@ export const listWebhookDeliveries = enterpriseProcedure
             limit: z.coerce.number().int().min(1).max(100).default(50),
         })
     )
-    .handler(async ({ context: { db, enterprise }, input }) => ({
-        deliveries: await db
+    .output(listWebhookDeliveriesOutputSchema)
+    .handler(async ({ context: { db, enterprise }, input }) => {
+        const deliveries = await db
             .select({
                 id: webhookDeliveries.id,
                 endpointId: webhookDeliveries.webhookEndpointId,
@@ -40,5 +42,7 @@ export const listWebhookDeliveries = enterpriseProcedure
                 )
             )
             .orderBy(desc(webhookDeliveries.createdAt))
-            .limit(input.limit),
-    }));
+            .limit(input.limit);
+
+        return listWebhookDeliveriesOutputSchema.parse({ deliveries });
+    });

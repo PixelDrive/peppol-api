@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints } from '../../../db/schema';
 import { getProvider } from '../../../providers/factory';
+import { deregisterParticipantOutputSchema } from '../../output-schemas';
 import {
     getEnterpriseParticipant,
     providerErrorMessage,
@@ -20,6 +21,7 @@ export const deregisterParticipant = adminProcedure
             'Deregisters the participant through the configured provider without deleting its local ownership record.',
     })
     .input(participantRegistrationPathSchema)
+    .output(deregisterParticipantOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const target = await getEnterpriseParticipant(
             db,

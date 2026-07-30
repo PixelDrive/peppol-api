@@ -1,6 +1,7 @@
 import { asc } from 'drizzle-orm';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints, enterprises } from '../../../db/schema';
+import { listEnterprisesOutputSchema } from '../../output-schemas';
 
 export const listEnterprises = adminProcedure
     .route({
@@ -8,6 +9,7 @@ export const listEnterprises = adminProcedure
         path: '/',
         summary: 'List enterprises',
     })
+    .output(listEnterprisesOutputSchema)
     .handler(async ({ context: { db } }) => {
         const [enterpriseRows, participantIdentifierRows] = await Promise.all([
             db.select().from(enterprises).orderBy(asc(enterprises.name)),

@@ -70,5 +70,23 @@
 - `pnpm db:generate`
 - `docker compose up --build`
 
+## Testing policy
+
+- Use `.agents/skills/write-valuable-tests/SKILL.md` whenever adding, changing
+  or reviewing tests.
+- Tests are not required for every change. Add a test only when it protects an
+  observable behavior, public contract, security/data invariant or reproduced
+  bug against a plausible regression.
+- Prefer extending an existing test over creating a new test file, and add the
+  smallest number of cases needed to cover distinct risks.
+- Do not add tests merely to increase coverage, confirm that code or schema
+  declarations exist, mirror implementation details or mock call sequences,
+  duplicate existing coverage, or re-check guarantees already enforced by
+  TypeScript, Zod, ESLint or database constraints.
+- A useful test must be capable of failing for the intended regression while
+  remaining stable across valid refactors. If that failure mode cannot be
+  stated concretely, do not add the test.
+- Run the relevant existing checks even when no new test is justified.
+
 Update `docs/build-task-log.md` when implementation work changes runtime
 behavior or architecture.

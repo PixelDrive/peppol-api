@@ -8,6 +8,7 @@ import {
     enterprises,
     providerCredentials,
 } from '../../../db/schema';
+import { getEnterpriseOutputSchema } from '../../output-schemas';
 
 export const getEnterprise = adminProcedure
     .route({
@@ -16,6 +17,7 @@ export const getEnterprise = adminProcedure
         summary: 'Get an enterprise',
     })
     .input(z.object({ enterpriseId: z.uuid() }))
+    .output(getEnterpriseOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const [enterprise] = await db
             .select()

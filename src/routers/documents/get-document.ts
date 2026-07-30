@@ -3,6 +3,7 @@ import { ORPCError } from '@orpc/server';
 import { z } from 'zod';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { documents } from '../../db/schema';
+import { documentOutputSchema } from '../output-schemas';
 
 export const getDocument = enterpriseProcedure
     .route({
@@ -11,6 +12,7 @@ export const getDocument = enterpriseProcedure
         summary: 'Get an enterprise document',
     })
     .input(z.object({ documentId: z.uuid() }))
+    .output(documentOutputSchema)
     .handler(async ({ context: { db, enterprise }, input }) => {
         const [document] = await db
             .select()

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterprises, providerCredentials } from '../../../db/schema';
 import { encrypt } from '../../../lib/crypto';
+import { successOutputSchema } from '../../output-schemas';
 import { dokapiCredentialsSchema } from './schemas';
 
 export const updateProvider = adminProcedure
@@ -30,6 +31,7 @@ export const updateProvider = adminProcedure
                 }
             })
     )
+    .output(successOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         await db.transaction(async (transaction) => {
             await transaction

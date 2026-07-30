@@ -4,6 +4,7 @@ import { enterpriseProcedure } from '../../auth/enterprise';
 import { assertSenderBelongsToEnterprise } from '../../peppol/authorization';
 import { validateWithKosit } from '../../peppol/validation';
 import { parseUblDocument } from '../../peppol/xml';
+import { validateDocumentOutputSchema } from '../output-schemas';
 
 export const validateDocument = enterpriseProcedure
     .route({
@@ -14,6 +15,7 @@ export const validateDocument = enterpriseProcedure
             'Checks tenant ownership of the supplier EndpointID, then validates independently from the Peppol provider.',
     })
     .input(z.object({ ublXml: z.string().min(1).max(5_000_000) }))
+    .output(validateDocumentOutputSchema)
     .handler(async ({ context: { db, enterprise }, input }) => {
         const metadata = parseUblDocument(input.ublXml);
         await assertSenderBelongsToEnterprise(

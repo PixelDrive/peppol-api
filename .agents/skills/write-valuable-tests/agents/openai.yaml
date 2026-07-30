@@ -1,0 +1,4 @@
+interface:
+    display_name: 'Write Valuable Tests'
+    short_description: 'Add tests only when they protect real behavior'
+    default_prompt: 'Use $write-valuable-tests to decide which tests are worth adding for this change.'

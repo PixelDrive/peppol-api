@@ -125,8 +125,13 @@
       XML, party details and raw errors remain excluded.
 - [x] Add an administrator endpoint for listing enterprise API keys.
       Files: `src/routers/admin/enterprises/list-api-keys.ts`,
-      `src/routers/admin/enterprises/index.ts`, `tests/list-api-keys.test.ts`,
-      `README.md`.
-      Validation: the tenant-scoped query returns operational key metadata in
-      reverse creation order and its explicit projection excludes hashes and
-      secret key values.
+      `src/routers/admin/enterprises/index.ts`,
+      `tests/openapi-output-schemas.test.ts`, `README.md`.
+      Validation: the public response contract exposes operational key metadata
+      without API key hashes or secret values.
+- [x] Document successful response bodies for every oRPC/OpenAPI operation.
+      Files: `src/routers/output-schemas.ts`, `src/routers/`,
+      `tests/openapi-output-schemas.test.ts`.
+      Validation: shared Zod output contracts type-check procedure handlers,
+      expose concrete JSON schemas for every `2xx` response and keep API key
+      hashes and secret values out of list-response documentation.

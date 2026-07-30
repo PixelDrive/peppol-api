@@ -5,6 +5,7 @@ import {
     lookupPeppolParticipant,
     PeppolDiscoveryError,
 } from '../../peppol/discovery';
+import { participantLookupOutputSchema } from '../output-schemas';
 
 export const lookupParticipant = enterpriseProcedure
     .route({
@@ -26,6 +27,7 @@ export const lookupParticipant = enterpriseProcedure
                 ),
         })
     )
+    .output(participantLookupOutputSchema)
     .handler(async ({ context: { logger }, input }) => {
         try {
             return await lookupPeppolParticipant(input.participantId);

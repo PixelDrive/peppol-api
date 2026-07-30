@@ -5,6 +5,7 @@ import { getConfig } from '../../config';
 import { webhookEndpoints } from '../../db/schema';
 import { encrypt } from '../../lib/crypto';
 import { webhookEventTypes } from '../../webhooks/events';
+import { createWebhookEndpointOutputSchema } from '../output-schemas';
 
 export const createWebhookEndpoint = enterpriseProcedure
     .route({
@@ -23,6 +24,7 @@ export const createWebhookEndpoint = enterpriseProcedure
                 .default([...webhookEventTypes]),
         })
     )
+    .output(createWebhookEndpointOutputSchema)
     .handler(async ({ context: { db, enterprise }, input }) => {
         const parsedUrl = new URL(input.url);
         if (
@@ -48,10 +50,10 @@ export const createWebhookEndpoint = enterpriseProcedure
                 active: webhookEndpoints.active,
                 createdAt: webhookEndpoints.createdAt,
             });
-        return {
+        return createWebhookEndpointOutputSchema.parse({
             ...endpoint!,
             secret,
             warning:
                 'This signing secret is only returned once. Store it securely.',
-        };
+        });
     });

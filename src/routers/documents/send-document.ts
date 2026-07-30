@@ -8,6 +8,7 @@ import { validateWithKosit } from '../../peppol/validation';
 import { parseUblDocument } from '../../peppol/xml';
 import { getProvider } from '../../providers/factory';
 import { emitWebhookEvent } from '../../webhooks/delivery';
+import { sendDocumentOutputSchema } from '../output-schemas';
 import {
     resolveSendDocumentXml,
     sendDocumentInputSchema,
@@ -22,6 +23,7 @@ export const sendDocument = enterpriseProcedure
             'Accepts UBL XML or a structured Invoice DTO, then authorizes the supplier participant identifier, derives the sender country from the final XML, validates with KoSIT and delegates transport to the configured provider.',
     })
     .input(sendDocumentInputSchema)
+    .output(sendDocumentOutputSchema)
     .handler(async ({ context: { db, enterprise, logger }, input }) => {
         const ublXml = resolveSendDocumentXml(input);
         const metadata = parseUblDocument(ublXml);

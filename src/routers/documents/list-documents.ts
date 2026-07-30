@@ -2,6 +2,7 @@ import { and, desc, eq, lt } from 'drizzle-orm';
 import { z } from 'zod';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { documents } from '../../db/schema';
+import { listDocumentsOutputSchema } from '../output-schemas';
 
 export const listDocuments = enterpriseProcedure
     .route({
@@ -15,6 +16,7 @@ export const listDocuments = enterpriseProcedure
             limit: z.coerce.number().int().min(1).max(100).default(25),
         })
     )
+    .output(listDocumentsOutputSchema)
     .handler(async ({ context: { db, enterprise }, input }) => {
         const rows = await db
             .select({

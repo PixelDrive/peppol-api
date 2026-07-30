@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { adminProcedure } from '../../../auth/admin';
 import { enterpriseEndpoints, enterprises } from '../../../db/schema';
 import { normalizePeppolParticipantIdentifier } from '../../../lib/peppol-endpoint';
+import { addParticipantIdentifierOutputSchema } from '../../output-schemas';
 
 export const addParticipantIdentifier = adminProcedure
     .route({
@@ -19,6 +20,7 @@ export const addParticipantIdentifier = adminProcedure
             participantId: z.string().trim().min(1),
         })
     )
+    .output(addParticipantIdentifierOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         let participantIdentifier;
         try {

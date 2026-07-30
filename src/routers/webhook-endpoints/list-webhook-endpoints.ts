@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { webhookEndpoints } from '../../db/schema';
+import { listWebhookEndpointsOutputSchema } from '../output-schemas';
 
 export const listWebhookEndpoints = enterpriseProcedure
     .route({
@@ -8,8 +9,9 @@ export const listWebhookEndpoints = enterpriseProcedure
         path: '/',
         summary: 'List client webhook endpoints',
     })
-    .handler(async ({ context: { db, enterprise } }) => ({
-        endpoints: await db
+    .output(listWebhookEndpointsOutputSchema)
+    .handler(async ({ context: { db, enterprise } }) => {
+        const endpoints = await db
             .select({
                 id: webhookEndpoints.id,
                 url: webhookEndpoints.url,
@@ -19,5 +21,7 @@ export const listWebhookEndpoints = enterpriseProcedure
                 updatedAt: webhookEndpoints.updatedAt,
             })
             .from(webhookEndpoints)
-            .where(eq(webhookEndpoints.enterpriseId, enterprise.id)),
-    }));
+            .where(eq(webhookEndpoints.enterpriseId, enterprise.id));
+
+        return listWebhookEndpointsOutputSchema.parse({ endpoints });
+    });

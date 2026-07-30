@@ -1,6 +1,7 @@
 import { ORPCError } from '@orpc/server';
 import { adminProcedure } from '../../../auth/admin';
 import { getProvider } from '../../../providers/factory';
+import { deregisterParticipantServiceOutputSchema } from '../../output-schemas';
 import {
     getEnterpriseParticipant,
     throwProviderFailure,
@@ -17,6 +18,7 @@ export const deregisterParticipantService = adminProcedure
             'Removes a published document type from the participant through the configured provider.',
     })
     .input(participantServiceRemovalInputSchema)
+    .output(deregisterParticipantServiceOutputSchema)
     .handler(async ({ context: { db }, input }) => {
         const target = await getEnterpriseParticipant(
             db,
