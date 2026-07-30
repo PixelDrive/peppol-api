@@ -1,0 +1,119 @@
+{
+    "type": "INVOICE",
+    "document": {
+        "ID": "TEST-PEPPOL-2026-001",
+        "issueDate": "2026-07-30",
+        "dueDate": "2026-08-29",
+        "invoiceTypeCode": 380,
+        "documentCurrencyCode": "EUR",
+        "buyerReference": "TEST-ONLY",
+        "note": [
+            {
+                "content": "TEST INVOICE — no commercial or accounting value. For use only on the Peppol test network.",
+                "languageID": "en"
+            }
+        ],
+        "seller": {
+            "endPoint": {
+                "scheme": "0208",
+                "id": "0732788874"
+            },
+            "identification": [
+                {
+                    "scheme": "0208",
+                    "id": "0732788874"
+                }
+            ],
+            "name": "Loir, Simon",
+            "address": {
+                "country": "BE"
+            },
+            "taxSchemes": [
+                {
+                    "companyId": "BE0732788874",
+                    "schemeID": "VAT"
+                }
+            ],
+            "legalEntity": {
+                "registrationName": "Loir, Simon",
+                "companyId": {
+                    "id": "0732788874",
+                    "schemeID": "0208"
+                }
+            }
+        },
+        "buyer": {
+            "endPoint": {
+                "scheme": "0208",
+                "id": "1022713956"
+            },
+            "identification": [
+                {
+                    "scheme": "0208",
+                    "id": "1022713956"
+                }
+            ],
+            "name": "THIA'GENCY",
+            "address": {
+                "streetName": "Rue Cockerill 39",
+                "cityName": "Spa",
+                "postalZone": "4900",
+                "country": "BE"
+            },
+            "taxSchemes": [
+                {
+                    "companyId": "BE1022713956",
+                    "schemeID": "VAT"
+                }
+            ],
+            "legalEntity": {
+                "registrationName": "THIA'GENCY",
+                "companyId": {
+                    "id": "1022713956",
+                    "schemeID": "0208"
+                },
+                "legalForm": "Société à responsabilité limitée"
+            }
+        },
+        "paymentTermsNote": "TEST ONLY — no payment is due.",
+        "taxTotal": [
+            {
+                "taxAmountCurrency": "EUR",
+                "taxAmount": 210,
+                "subTotals": [
+                    {
+                        "taxableAmount": 1000,
+                        "taxAmount": 210,
+                        "taxCategory": {
+                            "categoryCode": "S",
+                            "percent": 21
+                        }
+                    }
+                ]
+            }
+        ],
+        "legalMonetaryTotal": {
+            "currency": "EUR",
+            "lineExtensionAmount": 1000,
+            "taxExclusiveAmount": 1000,
+            "taxInclusiveAmount": 1210,
+            "prepaidAmount": 0,
+            "payableAmount": 1210
+        },
+        "invoiceLines": [
+            {
+                "id": "1",
+                "invoicedQuantity": 1,
+                "unitCode": "C62",
+                "lineExtensionAmount": 1000,
+                "price": 1000,
+                "name": "Test IT consulting services — no commercial value",
+                "currency": "EUR",
+                "taxCategory": {
+                    "categoryCode": "S",
+                    "percent": 21
+                }
+            }
+        ]
+    }
+}

@@ -1,6 +1,5 @@
 import { eq } from 'drizzle-orm';
 import { ORPCError } from '@orpc/server';
-import { z } from 'zod';
 import { enterpriseProcedure } from '../../auth/enterprise';
 import { getConfig } from '../../config';
 import { documents } from '../../db/schema';
@@ -9,6 +8,10 @@ import { validateWithKosit } from '../../peppol/validation';
 import { parseUblDocument } from '../../peppol/xml';
 import { getProvider } from '../../providers/factory';
 import { emitWebhookEvent } from '../../webhooks/delivery';
+import {
+    resolveSendDocumentXml,
+    sendDocumentInputSchema,
+} from './send-document-input';
 
 export const sendDocument = enterpriseProcedure
     .route({
@@ -16,17 +19,12 @@ export const sendDocument = enterpriseProcedure
         path: '/send',
         summary: 'Send a UBL document over Peppol',
         description:
-            'Authorizes the supplier participant identifier, derives the sender country from the final XML, validates with KoSIT, then delegates transport to the configured provider.',
+            'Accepts UBL XML or a structured Invoice DTO, then authorizes the supplier participant identifier, derives the sender country from the final XML, validates with KoSIT and delegates transport to the configured provider.',
     })
-    .input(
-        z.object({
-            ublXml: z.string().min(1).max(5_000_000),
-            externalReference: z.string().trim().max(200).optional(),
-            validate: z.boolean().optional(),
-        })
-    )
+    .input(sendDocumentInputSchema)
     .handler(async ({ context: { db, enterprise, logger }, input }) => {
-        const metadata = parseUblDocument(input.ublXml);
+        const ublXml = resolveSendDocumentXml(input);
+        const metadata = parseUblDocument(ublXml);
         await assertSenderBelongsToEnterprise(
             db,
             enterprise.id,
@@ -43,13 +41,13 @@ export const sendDocument = enterpriseProcedure
                 senderEndpoint: metadata.senderEndpoint,
                 receiverEndpoint: metadata.receiverEndpoint,
                 externalReference: input.externalReference,
-                ublXml: input.ublXml,
+                ublXml,
             })
             .returning();
 
         try {
             if (input.validate ?? getConfig().VALIDATE_BEFORE_SEND) {
-                const validation = await validateWithKosit(input.ublXml);
+                const validation = await validateWithKosit(ublXml);
                 if (!validation.valid) {
                     await db
                         .update(documents)
@@ -80,7 +78,7 @@ export const sendDocument = enterpriseProcedure
 
             const provider = await getProvider(db, enterprise);
             const result = await provider.sendDocument({
-                ublXml: input.ublXml,
+                ublXml,
                 type: metadata.type,
                 senderEndpoint: metadata.senderEndpoint,
                 receiverEndpoint: metadata.receiverEndpoint,

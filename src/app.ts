@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { db } from './db/client';
 import { logger } from './lib/logger';
+import { createRequestLoggingMiddleware } from './middleware/request-logging';
 import { providerWebhooksRouter } from './routes/provider-webhooks';
 import { router } from './routers';
 
@@ -53,6 +54,8 @@ const openApiGenerator = new OpenAPIGenerator({
 
 export const app = new Hono();
 
+app.use('*', createRequestLoggingMiddleware(logger));
+
 app.use(
     '*',
     cors({
@@ -62,8 +65,9 @@ app.use(
             'content-type',
             'authorization',
             'x-api-key',
-            'x-webhook-secret',
+            'x-dokapi-signature',
         ],
+        exposeHeaders: ['x-request-id'],
         credentials: true,
     })
 );

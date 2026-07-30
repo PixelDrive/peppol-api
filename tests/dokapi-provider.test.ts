@@ -19,7 +19,7 @@ describe('Dokapi provider', () => {
             )
             .mockResolvedValueOnce(
                 Response.json({
-                    id: 'document-id',
+                    document: { ulid: 'document-id' },
                     preSignedUploadUrl: 'https://uploads.example/document.xml',
                 })
             )
@@ -32,7 +32,7 @@ describe('Dokapi provider', () => {
             baseUrl: 'https://dokapi.example/v1',
             tokenUrl: 'https://dokapi.example/oauth/token',
         });
-        await provider.sendDocument({
+        const result = await provider.sendDocument({
             ublXml: '<Invoice />',
             type: 'INVOICE',
             senderEndpoint: '0106:123456789',
@@ -41,11 +41,54 @@ describe('Dokapi provider', () => {
             externalReference: 'reference',
         });
 
+        expect(result).toEqual({
+            providerDocumentId: 'document-id',
+            status: 'PENDING',
+        });
         const reservationRequest = fetchMock.mock.calls[1]?.[1];
         expect(JSON.parse(String(reservationRequest?.body))).toMatchObject({
             sender: { value: '0106:123456789' },
             c1CountryCode: 'NL',
         });
+    });
+
+    it('rejects a create-document response without the documented document ULID', async () => {
+        const fetchMock = vi
+            .fn<typeof fetch>()
+            .mockResolvedValueOnce(
+                Response.json({
+                    /* eslint-disable camelcase -- Dokapi OAuth wire names */
+                    access_token: 'malformed-response-token',
+                    expires_in: 300,
+                    /* eslint-enable camelcase */
+                })
+            )
+            .mockResolvedValueOnce(
+                Response.json({
+                    document: {},
+                    preSignedUploadUrl: 'https://uploads.example/document.xml',
+                })
+            );
+        vi.stubGlobal('fetch', fetchMock);
+
+        const provider = new DokapiProvider({
+            clientId: 'malformed-response-client',
+            clientSecret: 'secret',
+            baseUrl: 'https://dokapi.example/v1',
+            tokenUrl: 'https://dokapi.example/oauth/token',
+        });
+
+        await expect(
+            provider.sendDocument({
+                ublXml: '<Invoice />',
+                type: 'INVOICE',
+                senderEndpoint: '0106:123456789',
+                receiverEndpoint: '0208:0732788874',
+                senderCountryCode: 'NL',
+                externalReference: 'reference',
+            })
+        ).rejects.toThrow('Dokapi response has no document.ulid');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
     it('registers a participant, its business card and a document service', async () => {

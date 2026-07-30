@@ -78,3 +78,55 @@
       Validation: Dokapi request mapping, partial registration handling and
       registration input defaults are covered by unit tests; status is
       persisted and refreshable after interrupted operations.
+- [x] Align the Dokapi adapter with the current production OpenAPI contract.
+      Files: `src/providers/dokapi.ts`,
+      `src/routes/provider-webhooks/dokapi.ts`,
+      `tests/dokapi-provider.test.ts`.
+      Validation: outgoing document IDs are read from the documented
+      `document.ulid` response field, malformed responses fail before upload,
+      and incoming provider document IDs use the webhook body ULID rather than
+      the webhook invocation ULID.
+- [x] Allow document submission from either UBL XML or an Invoice DTO.
+      Files: `src/routers/documents/send-document.ts`,
+      `src/routers/documents/send-document-input.ts`,
+      `tests/send-document-input.test.ts`, `README.md`.
+      Validation: both request shapes resolve to final UBL XML before the shared
+      authorization, KoSIT validation, persistence and provider submission
+      flow; ambiguous and missing document payloads are rejected.
+- [x] Add privacy-safe operational logging for Dokapi webhooks.
+      Files: `src/routes/provider-webhooks/dokapi.ts`,
+      `src/routes/provider-webhooks/dokapi-logging.ts`,
+      `tests/dokapi-webhook-logging.test.ts`.
+      Validation: authenticated webhook receipt, duplicate handling, incoming
+      documents and outgoing feedback log allowlisted document, tenant and
+      participant identifiers plus statuses; private payload fields and raw
+      error details are excluded.
+- [x] Add privacy-safe logging for every incoming HTTP request.
+      Files: `src/middleware/request-logging.ts`, `src/app.ts`,
+      `tests/request-logging.test.ts`.
+      Validation: completion logs contain only a correlation ID, method, path
+      without query parameters, status and duration; headers, query strings,
+      bodies and thrown error details are excluded.
+- [x] Verify Dokapi webhooks with the documented HMAC mechanism.
+      Files: `src/routes/provider-webhooks/dokapi.ts`,
+      `src/routes/provider-webhooks/dokapi-signature.ts`,
+      `tests/dokapi-signature.test.ts`, `README.md`.
+      Validation: `x-dokapi-signature` is compared in constant time with an
+      HMAC-SHA256 digest of the exact raw body before JSON parsing; altered
+      payloads, whitespace changes and malformed signatures are rejected, and
+      neither secrets nor signatures are logged.
+- [x] Add privacy-safe failure codes to incoming Dokapi processing.
+      Files: `src/routes/provider-webhooks/dokapi.ts`,
+      `src/routes/provider-webhooks/dokapi-logging.ts`,
+      `tests/dokapi-webhook-logging.test.ts`.
+      Validation: missing metadata, unknown local receivers, download failures
+      and participant mismatches expose a stable error code and processing stage
+      together with sender and receiver participant identifiers, while URLs,
+      XML, party details and raw errors remain excluded.
+- [x] Add an administrator endpoint for listing enterprise API keys.
+      Files: `src/routers/admin/enterprises/list-api-keys.ts`,
+      `src/routers/admin/enterprises/index.ts`, `tests/list-api-keys.test.ts`,
+      `README.md`.
+      Validation: the tenant-scoped query returns operational key metadata in
+      reverse creation order and its explicit projection excludes hashes and
+      secret key values.

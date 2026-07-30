@@ -77,8 +77,10 @@ it on the next restart.
    BCE/KBO or VAT number derives a `0208` identifier.
 3. `PUT /api/admin/enterprises/{enterpriseId}/provider` switches between global
    Dokapi credentials and encrypted enterprise-specific credentials.
-4. The `/api/admin/enterprises/{enterpriseId}/api-keys` endpoints support key
-   rotation and revocation.
+4. `GET /api/admin/enterprises/{enterpriseId}/api-keys` lists key metadata
+   without exposing secrets or hashes. `POST` creates a key and
+   `DELETE /api/admin/enterprises/{enterpriseId}/api-keys/{apiKeyId}` revokes
+   one.
 5. `POST /api/admin/enterprises/{enterpriseId}/participant-identifiers` adds an
    identifier.
    `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}`
@@ -187,8 +189,11 @@ Pass the enterprise key in the `x-api-key` header.
   `@pixeldrive/peppol-toolkit`.
 - `POST /api/documents/validate`: verifies the participant identifier and
   validates the document with KoSIT.
-- `POST /api/documents/send`: authorizes, validates, persists and sends the
-  document through the configured adapter.
+- `POST /api/documents/send`: accepts either `{"ublXml":"..."}` or a structured
+  `{"type":"INVOICE","document":{...}}` payload, then authorizes, validates,
+  persists and sends the resulting UBL document through the configured adapter.
+  Optional `externalReference` and `validate` fields are supported by both
+  request shapes.
 - `GET /api/documents` and `GET /api/documents/{documentId}`: document tracking
   strictly scoped to the authenticated tenant.
 - `GET /api/participants/lookup?participantId=0208%3A0732788875`: checks a
@@ -265,8 +270,12 @@ Redis uses AOF and a persistent volume in Docker Compose. In production, the API
 and `node dist/worker.mjs` must be deployed as two independent processes sharing
 the same database and `REDIS_URL`.
 
-The incoming Dokapi webhook requires `x-webhook-secret`, which must match
-`DOKAPI_WEBHOOK_SECRET`.
+Generate and enable the Dokapi HMAC secret with
+`POST /webhooks/secretKey`, then store the returned value in
+`DOKAPI_WEBHOOK_SECRET`. Incoming Dokapi webhooks must include the hexadecimal
+HMAC-SHA256 digest in `x-dokapi-signature`. The digest is verified in constant
+time against the exact raw request body before JSON parsing; the secret and
+signature are never logged.
 
 ## Adding a provider
 

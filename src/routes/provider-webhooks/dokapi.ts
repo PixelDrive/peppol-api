@@ -9,12 +9,13 @@ import {
     enterprises,
     providerWebhookEvents,
 } from '../../db/schema';
-import { secretsEqual } from '../../lib/crypto';
 import { logger } from '../../lib/logger';
 import { normalizePeppolParticipantIdentifier } from '../../lib/peppol-endpoint';
 import { parseUblDocument } from '../../peppol/xml';
 import { validateWithKosit } from '../../peppol/validation';
 import { emitWebhookEvent } from '../../webhooks/delivery';
+import { safeDokapiWebhookLogContext } from './dokapi-logging';
+import { verifyDokapiWebhookSignature } from './dokapi-signature';
 
 const dokapiEventSchema = z
     .object({
@@ -23,6 +24,17 @@ const dokapiEventSchema = z
         body: z.record(z.string(), z.unknown()),
     })
     .passthrough();
+
+class DokapiWebhookProcessingError extends Error {
+    readonly name = 'DokapiWebhookProcessingError';
+
+    constructor(
+        readonly code: string,
+        readonly processingStage: string
+    ) {
+        super(code);
+    }
+}
 
 function nestedString(
     body: Record<string, unknown>,
@@ -44,12 +56,26 @@ function identifierValue(
     return typeof value === 'string' ? value.toLowerCase() : undefined;
 }
 
+function documentNumberFromUbl(ublXml: string): string | undefined {
+    try {
+        return parseUblDocument(ublXml).documentId;
+    } catch {
+        return undefined;
+    }
+}
+
 async function handleOutgoingFeedback(
     payload: z.infer<typeof dokapiEventSchema>
 ): Promise<void> {
     const externalReference = nestedString(payload.body, 'externalReference');
     if (!externalReference) {
-        logger.warn({ eventId: payload.ulid }, 'Dokapi event has no reference');
+        logger.warn(
+            safeDokapiWebhookLogContext({
+                eventId: payload.ulid,
+                event: payload.event,
+            }),
+            'Dokapi event has no reference'
+        );
         return;
     }
 
@@ -60,7 +86,11 @@ async function handleOutgoingFeedback(
         .limit(1);
     if (!document) {
         logger.warn(
-            { externalReference },
+            safeDokapiWebhookLogContext({
+                eventId: payload.ulid,
+                event: payload.event,
+                documentId: externalReference,
+            }),
             'Dokapi event references an unknown document'
         );
         return;
@@ -105,6 +135,21 @@ async function handleOutgoingFeedback(
             error: errorMessage,
         }
     );
+
+    logger.info(
+        safeDokapiWebhookLogContext({
+            eventId: payload.ulid,
+            event: payload.event,
+            documentId: document.id,
+            documentNumber: documentNumberFromUbl(document.ublXml),
+            providerDocumentId: nestedString(payload.body, 'ulid'),
+            senderParticipantId: identifierValue(payload.body, 'sender'),
+            receiverParticipantId: identifierValue(payload.body, 'receiver'),
+            providerStatus: dokapiStatus,
+            status,
+        }),
+        'Dokapi outgoing document feedback processed'
+    );
 }
 
 async function handleIncomingDocument(
@@ -116,8 +161,9 @@ async function handleIncomingDocument(
         nestedString(payload.body, 'presignedUrl') ??
         nestedString(payload.body, 'preSignedDownloadUrl');
     if (!rawReceiver || !rawSender || !presignedUrl) {
-        throw new Error(
-            'Incoming Dokapi event is missing sender, receiver or presignedUrl'
+        throw new DokapiWebhookProcessingError(
+            'MISSING_DOCUMENT_METADATA',
+            'validate_metadata'
         );
     }
 
@@ -141,8 +187,9 @@ async function handleIncomingDocument(
         )
         .limit(1);
     if (!target) {
-        throw new Error(
-            `No enterprise owns receiver participant identifier ${receiver.canonical}`
+        throw new DokapiWebhookProcessingError(
+            'RECEIVER_NOT_OWNED',
+            'resolve_receiver'
         );
     }
 
@@ -150,8 +197,9 @@ async function handleIncomingDocument(
         signal: AbortSignal.timeout(30_000),
     });
     if (!response.ok) {
-        throw new Error(
-            `Unable to download incoming UBL: HTTP ${response.status}`
+        throw new DokapiWebhookProcessingError(
+            'DOCUMENT_DOWNLOAD_FAILED',
+            'download_document'
         );
     }
     const ublXml = await response.text();
@@ -160,8 +208,9 @@ async function handleIncomingDocument(
         metadata.receiverEndpoint !== receiver.canonical ||
         metadata.senderEndpoint !== sender.canonical
     ) {
-        throw new Error(
-            'Incoming XML participant identifiers differ from the authenticated Dokapi event'
+        throw new DokapiWebhookProcessingError(
+            'DOCUMENT_PARTICIPANT_MISMATCH',
+            'verify_participants'
         );
     }
 
@@ -176,7 +225,7 @@ async function handleIncomingDocument(
             senderEndpoint: metadata.senderEndpoint,
             receiverEndpoint: metadata.receiverEndpoint,
             providerDocumentId:
-                nestedString(payload.body, 'id') ?? payload.ulid,
+                nestedString(payload.body, 'ulid') ?? payload.ulid,
             externalReference: nestedString(payload.body, 'externalReference'),
             ublXml,
             errorMessage: validation.valid
@@ -197,6 +246,22 @@ async function handleIncomingDocument(
             validationErrors: validation.errors,
         }
     );
+
+    logger.info(
+        safeDokapiWebhookLogContext({
+            eventId: payload.ulid,
+            event: payload.event,
+            documentId: document!.id,
+            documentNumber: metadata.documentId,
+            providerDocumentId: nestedString(payload.body, 'ulid'),
+            enterpriseId: target.enterprise.id,
+            senderParticipantId: sender.canonical,
+            receiverParticipantId: receiver.canonical,
+            status: document!.status,
+            validationStatus: validation.valid ? 'VALID' : 'INVALID',
+        }),
+        'Dokapi incoming document processed'
+    );
 }
 
 export const dokapiWebhookRouter = new Hono();
@@ -205,21 +270,30 @@ dokapiWebhookRouter.get('/ping', (context) => context.text('pong'));
 
 dokapiWebhookRouter.post('/events', async (context) => {
     const expectedSecret = getConfig().DOKAPI_WEBHOOK_SECRET;
-    const authorization = context.req.header('authorization');
-    const providedSecret =
-        context.req.header('x-webhook-secret') ??
-        (authorization?.startsWith('Bearer ')
-            ? authorization.slice('Bearer '.length)
-            : undefined);
+    const receivedSignature = context.req.header('x-dokapi-signature');
+    const rawBody = Buffer.from(await context.req.arrayBuffer());
+
     if (
         !expectedSecret ||
-        !providedSecret ||
-        !secretsEqual(providedSecret, expectedSecret)
+        !receivedSignature ||
+        !verifyDokapiWebhookSignature(
+            rawBody,
+            receivedSignature,
+            expectedSecret
+        )
     ) {
-        return context.json({ error: 'Invalid webhook secret' }, 401);
+        logger.warn({}, 'Dokapi webhook signature verification failed');
+        return context.json({ error: 'Invalid Dokapi signature' }, 401);
     }
 
-    const parsed = dokapiEventSchema.safeParse(await context.req.json());
+    let body: unknown;
+    try {
+        body = JSON.parse(rawBody.toString('utf8'));
+    } catch {
+        return context.json({ error: 'Invalid Dokapi event JSON' }, 400);
+    }
+
+    const parsed = dokapiEventSchema.safeParse(body);
     if (!parsed.success) {
         return context.json(
             { error: 'Invalid Dokapi event', issues: parsed.error.issues },
@@ -227,6 +301,16 @@ dokapiWebhookRouter.post('/events', async (context) => {
         );
     }
     const payload = parsed.data;
+    logger.info(
+        safeDokapiWebhookLogContext({
+            eventId: payload.ulid,
+            event: payload.event,
+            providerDocumentId: nestedString(payload.body, 'ulid'),
+            senderParticipantId: identifierValue(payload.body, 'sender'),
+            receiverParticipantId: identifierValue(payload.body, 'receiver'),
+        }),
+        'Dokapi webhook received'
+    );
 
     const [recorded] = await db
         .insert(providerWebhookEvents)
@@ -238,6 +322,20 @@ dokapiWebhookRouter.post('/events', async (context) => {
         .onConflictDoNothing()
         .returning({ id: providerWebhookEvents.id });
     if (!recorded) {
+        logger.info(
+            safeDokapiWebhookLogContext({
+                eventId: payload.ulid,
+                event: payload.event,
+                providerDocumentId: nestedString(payload.body, 'ulid'),
+                senderParticipantId: identifierValue(payload.body, 'sender'),
+                receiverParticipantId: identifierValue(
+                    payload.body,
+                    'receiver'
+                ),
+                duplicate: true,
+            }),
+            'Duplicate Dokapi webhook ignored'
+        );
         return context.json({ received: true, duplicate: true });
     }
 
@@ -251,7 +349,19 @@ dokapiWebhookRouter.post('/events', async (context) => {
                 break;
             default:
                 logger.info(
-                    { event: payload.event, eventId: payload.ulid },
+                    safeDokapiWebhookLogContext({
+                        event: payload.event,
+                        eventId: payload.ulid,
+                        providerDocumentId: nestedString(payload.body, 'ulid'),
+                        senderParticipantId: identifierValue(
+                            payload.body,
+                            'sender'
+                        ),
+                        receiverParticipantId: identifierValue(
+                            payload.body,
+                            'receiver'
+                        ),
+                    }),
                     'Ignoring unsupported Dokapi event'
                 );
         }
@@ -261,7 +371,25 @@ dokapiWebhookRouter.post('/events', async (context) => {
             .delete(providerWebhookEvents)
             .where(eq(providerWebhookEvents.id, recorded.id));
         logger.error(
-            { error, eventId: payload.ulid, event: payload.event },
+            safeDokapiWebhookLogContext({
+                errorName: error instanceof Error ? error.name : 'UnknownError',
+                errorCode:
+                    error instanceof DokapiWebhookProcessingError
+                        ? error.code
+                        : 'UNEXPECTED_PROCESSING_ERROR',
+                processingStage:
+                    error instanceof DokapiWebhookProcessingError
+                        ? error.processingStage
+                        : undefined,
+                eventId: payload.ulid,
+                event: payload.event,
+                providerDocumentId: nestedString(payload.body, 'ulid'),
+                senderParticipantId: identifierValue(payload.body, 'sender'),
+                receiverParticipantId: identifierValue(
+                    payload.body,
+                    'receiver'
+                ),
+            }),
             'Dokapi webhook processing failed'
         );
         return context.json({ error: 'Webhook processing failed' }, 500);

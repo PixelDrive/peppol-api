@@ -20,9 +20,12 @@ type TokenCacheEntry = {
 const tokenCache = new Map<string, TokenCacheEntry>();
 const peppolParticipantScheme = 'iso6523-actorid-upis';
 
-type OutgoingDocumentResponse = {
-    id?: string;
+type DokapiOutgoingDocument = {
     ulid?: string;
+};
+
+type CreateOutgoingDocumentResponse = {
+    document?: DokapiOutgoingDocument;
     preSignedUploadUrl?: string;
 };
 
@@ -203,9 +206,12 @@ export class DokapiProvider implements PeppolProvider {
         );
 
         const outgoing =
-            (await createResponse.json()) as OutgoingDocumentResponse;
+            (await createResponse.json()) as CreateOutgoingDocumentResponse;
         if (!outgoing.preSignedUploadUrl) {
             throw new Error('Dokapi response has no preSignedUploadUrl');
+        }
+        if (!outgoing.document?.ulid) {
+            throw new Error('Dokapi response has no document.ulid');
         }
 
         const uploadResponse = await fetch(outgoing.preSignedUploadUrl, {
@@ -221,7 +227,7 @@ export class DokapiProvider implements PeppolProvider {
         }
 
         return {
-            providerDocumentId: outgoing.id ?? outgoing.ulid,
+            providerDocumentId: outgoing.document.ulid,
             status: 'PENDING',
         };
     }

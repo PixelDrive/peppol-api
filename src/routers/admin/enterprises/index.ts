@@ -6,6 +6,7 @@ import { deregisterParticipant } from './deregister-participant';
 import { deregisterParticipantService } from './deregister-participant-service';
 import { getEnterprise } from './get-enterprise';
 import { getParticipantRegistration } from './get-participant-registration';
+import { listApiKeys } from './list-api-keys';
 import { listEnterprises } from './list-enterprises';
 import { registerParticipant } from './register-participant';
 import { registerParticipantService } from './register-participant-service';
@@ -22,6 +23,7 @@ export const adminEnterprisesRouter = adminProcedure
         get: getEnterprise,
         updateProvider,
         createApiKey,
+        listApiKeys,
         revokeApiKey,
         addParticipantIdentifier,
         removeParticipantIdentifier,
