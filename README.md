@@ -1,92 +1,90 @@
 # Peppol Hono API
 
-API TypeScript multi-tenant construite avec Hono et oRPC. Elle fournit une
-abstraction au-dessus des access points Peppol, avec Dokapi comme premier
-adapter, sans déléguer la validation UBL au provider. Les traitements de
-webhooks sont exécutés dans un worker BullMQ séparé, avec Redis comme queue
-durable.
+A multi-tenant TypeScript API built with Hono and oRPC. It provides an
+abstraction over Peppol access points, with Dokapi as the first adapter, while
+keeping UBL validation independent from providers. Webhook deliveries are
+processed by a separate BullMQ worker backed by Redis as a durable queue.
 
-## Principes de sécurité
+## Security principles
 
-- Un compte administrateur crée et configure les entreprises.
-- Chaque entreprise utilise ses propres clés API. Seul le préfixe et un hash
-  scrypt sont stockés ; la clé complète n’est affichée qu’à sa création.
-- Les identifiants Dokapi propres à une entreprise sont chiffrés en
-  AES-256-GCM dans PostgreSQL. Une entreprise peut aussi utiliser les
-  identifiants Dokapi globaux fournis par l’environnement.
-- Chaque entreprise possède un identifiant participant Peppol principal et
-  peut en enregistrer plusieurs autres. Ils sont uniques globalement dans
-  l’application afin qu’un document entrant soit toujours associé à un seul
-  tenant et à ses webhooks.
-- Les identifiants sont internationaux et utilisent la forme
-  `<scheme ISO 6523>:<value>`. En Belgique, le numéro BCE/KBO utilise
-  `0208:0732788875` et le numéro de TVA peut utiliser
-  `9925:BE0732788875`.
-- Avant chaque validation ou envoi, l’API parse le XML final et compare
-  l’identifiant participant du fournisseur à tous ceux de l’entreprise
-  authentifiée. Une entreprise peut émettre avec n’importe lequel de ses
-  identifiants enregistrés, mais jamais au nom d’une autre.
-- Le pays C1 transmis au provider est celui de l’adresse du fournisseur dans le
-  XML final ; il n’est pas forcé à `BE`.
-- La validation passe par un service KoSIT compatible, indépendamment du
-  provider.
+- An administrator account creates and configures enterprises.
+- Each enterprise uses its own API keys. Only the prefix and a scrypt hash are
+  stored; the complete key is displayed only when it is created.
+- Enterprise-specific Dokapi credentials are encrypted with AES-256-GCM in
+  PostgreSQL. An enterprise may alternatively use global Dokapi credentials
+  supplied through environment variables.
+- Each enterprise has a primary Peppol participant identifier and may register
+  several additional identifiers. Identifiers are globally unique within the
+  application so that every incoming document maps to exactly one tenant and
+  its webhooks.
+- Participant identifiers are international and use the
+  `<ISO 6523 scheme>:<value>` format. In Belgium, the BCE/KBO enterprise number
+  uses `0208:0732788875`, while a VAT number may use `9925:BE0732788875`.
+- Before every validation or submission, the API parses the final XML and
+  compares the supplier participant identifier against every identifier
+  registered to the authenticated enterprise. An enterprise may send with any
+  of its registered identifiers, but never on behalf of another enterprise.
+- The C1 country passed to the provider comes from the supplier address in the
+  final XML; it is not forced to `BE`.
+- Validation is performed through a KoSIT-compatible service independently of
+  the provider.
 
-## Démarrage local
+## Local setup
 
 ```bash
 cp .env.example .env
 openssl rand -hex 32
-# Reporter la valeur dans ENCRYPTION_SECRET et modifier les secrets admin.
+# Set the generated value as ENCRYPTION_SECRET and change the admin secrets.
 docker compose up --build
 ```
 
-L’API est disponible sur `http://localhost:3001` :
+The API is available at `http://localhost:3001`:
 
-- Scalar : `/`
-- OpenAPI : `/openapi.json`
-- transport REST/OpenAPI : `/api/*`
-- transport oRPC : `/rpc/*`
-- webhook Dokapi : `/webhooks/providers/dokapi/events`
+- Scalar: `/`
+- OpenAPI: `/openapi.json`
+- REST/OpenAPI transport: `/api/*`
+- Native oRPC transport: `/rpc/*`
+- Dokapi webhook: `/webhooks/providers/dokapi/events`
 
-Les migrations Drizzle sont appliquées au démarrage quand
-`RUN_MIGRATIONS=true`.
+Drizzle migrations are applied at startup when `RUN_MIGRATIONS=true`.
 
-Les variables Dokapi peuvent rester vides : aucun provider n’est requis pour
-démarrer l’application. Une entreprise configurée pour utiliser les credentials
-globaux recevra une erreur `PRECONDITION_FAILED` au moment d’un envoi tant que
-`DOKAPI_CLIENT_ID` et `DOKAPI_CLIENT_SECRET` ne sont pas configurés.
+Dokapi environment variables may remain empty: no provider is required for the
+application to start. An enterprise configured to use global credentials
+receives a `PRECONDITION_FAILED` error when attempting to send until
+`DOKAPI_CLIENT_ID` and `DOKAPI_CLIENT_SECRET` are configured.
 
-Pour développer hors Docker :
+To develop outside Docker:
 
 ```bash
 pnpm install
 docker compose up -d postgres redis
 pnpm db:migrate
 pnpm dev
-# Dans un second terminal
+# In a second terminal
 pnpm dev:worker
 ```
 
-## Flux d’administration
+## Administration flow
 
-Au démarrage, `ADMIN_EMAIL` et `ADMIN_PASSWORD` créent le compte administrateur
-s’il n’existe pas. Une modification du mot de passe dans l’environnement le
-met à jour au redémarrage.
+At startup, `ADMIN_EMAIL` and `ADMIN_PASSWORD` create the administrator account
+if it does not already exist. Changing the password in the environment updates
+it on the next restart.
 
-1. `POST /api/admin/auth/login` retourne un bearer token opaque.
-2. `POST /api/admin/enterprises` crée une entreprise avec son identifiant
-   participant principal et ses identifiants additionnels, puis retourne sa
-   première clé API une seule fois. Pour compatibilité, omettre `participantId`
-   et fournir un numéro BCE ou TVA belge dérive un identifiant `0208`.
-3. `PUT /api/admin/enterprises/{enterpriseId}/provider` bascule entre
-   credentials Dokapi globaux et credentials propres chiffrés.
-4. Les endpoints `/api/admin/enterprises/{enterpriseId}/api-keys` permettent
-   la rotation et la révocation des clés.
-5. `POST /api/admin/enterprises/{enterpriseId}/participant-identifiers` ajoute
-   un identifiant. `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}`
-   le retire ; le dernier identifiant ne peut pas être supprimé.
+1. `POST /api/admin/auth/login` returns an opaque bearer token.
+2. `POST /api/admin/enterprises` creates an enterprise with its primary and
+   additional participant identifiers, then returns its first API key once.
+   For backward compatibility, omitting `participantId` and providing a Belgian
+   BCE/KBO or VAT number derives a `0208` identifier.
+3. `PUT /api/admin/enterprises/{enterpriseId}/provider` switches between global
+   Dokapi credentials and encrypted enterprise-specific credentials.
+4. The `/api/admin/enterprises/{enterpriseId}/api-keys` endpoints support key
+   rotation and revocation.
+5. `POST /api/admin/enterprises/{enterpriseId}/participant-identifiers` adds an
+   identifier.
+   `DELETE /api/admin/enterprises/{enterpriseId}/participant-identifiers/{participantIdentifierId}`
+   removes it; the last identifier cannot be removed.
 
-Exemple de création :
+Creation example:
 
 ```json
 {
@@ -100,115 +98,115 @@ Exemple de création :
 }
 ```
 
-L’exemple accepte alors les documents destinés à
-`0208:0732788874` **et** `9925:BE0732788874` et les notifie sur les mêmes
-webhooks. Les documents sortants peuvent également utiliser l’un ou l’autre
-comme identifiant fournisseur.
+This example accepts documents addressed to both `0208:0732788874` and
+`9925:BE0732788874` and sends notifications to the same webhooks. Outgoing
+documents may also use either identifier as the supplier identifier.
 
-L’enregistrement dans cette API ne publie pas automatiquement l’identifiant sur
-le réseau Peppol : chaque identifiant doit aussi être activé chez l’access point
-utilisé et annoncé dans le SML/SMP.
+Registering an identifier in this API does not automatically publish it on the
+Peppol network. Each identifier must also be enabled by the selected access
+point and published through the SML/SMP.
 
-## API entreprise
+## Enterprise API
 
-Passer la clé dans `x-api-key`.
+Pass the enterprise key in the `x-api-key` header.
 
 - `GET /api/enterprise/me`
-- `POST /api/documents/generate` : transforme les données structurées en UBL
-  avec `@pixeldrive/peppol-toolkit`.
-- `POST /api/documents/validate` : contrôle l’EndpointID puis valide via KoSIT.
-- `POST /api/documents/send` : contrôle, valide, persiste et transmet via
-  l’adapter configuré.
-- `GET /api/documents` et `GET /api/documents/{documentId}` : suivi strictement
-  limité au tenant.
-- `GET /api/participants/lookup?participantId=0208%3A0732788875` : vérifie
-  directement l’inscription d’un participant dans le réseau Peppol et retourne
-  les types de documents annoncés par son SMP.
-- `/api/webhook-endpoints` : configuration et historique des webhooks clients.
+- `POST /api/documents/generate`: converts structured data to UBL with
+  `@pixeldrive/peppol-toolkit`.
+- `POST /api/documents/validate`: verifies the participant identifier and
+  validates the document with KoSIT.
+- `POST /api/documents/send`: authorizes, validates, persists and sends the
+  document through the configured adapter.
+- `GET /api/documents` and `GET /api/documents/{documentId}`: document tracking
+  strictly scoped to the authenticated tenant.
+- `GET /api/participants/lookup?participantId=0208%3A0732788875`: checks a
+  participant directly on the Peppol network and returns the document types
+  advertised by its SMP.
+- `/api/webhook-endpoints`: client webhook configuration and delivery history.
 
-Les documents entrants signalés par Dokapi sont téléchargés, vérifiés contre
-l’identifiant destinataire enregistré, validés avec KoSIT, persistés puis
-notifiés à l’entreprise qui possède cet identifiant. Tous les identifiants d’une
-même entreprise partagent donc la même configuration de webhooks.
+Incoming documents reported by Dokapi are downloaded, checked against the
+registered receiver identifier, validated with KoSIT, persisted and then
+reported to the enterprise that owns the identifier. All identifiers belonging
+to the same enterprise therefore share the same webhook configuration.
 
-## Lookup des participants Peppol
+## Peppol participant lookup
 
-Le lookup est indépendant des providers configurés. Il applique le mécanisme
-officiel SML/SMP actuellement en vigueur :
+Participant lookup is independent of configured providers. It implements the
+current official SML/SMP discovery mechanism:
 
-1. normalisation du Participant Identifier international ; les formes belges
-   abrégées BCE/TVA restent acceptées comme raccourci vers `0208:<BCE>`, tandis
-   qu’un identifiant TVA explicite utilise `9925:BE<TVA>` ;
-2. calcul du nom DNS avec SHA-256 et Base32 ;
-3. résolution du record U-NAPTR `Meta:SMP` ;
-4. lecture HTTPS du `ServiceGroup` sur le SMP découvert ;
-5. extraction des types de documents annoncés.
+1. Normalize the international participant identifier. Belgian BCE/KBO and VAT
+   shorthand values remain accepted as a convenience and map to `0208:<BCE>`,
+   while an explicit Belgian VAT identifier uses `9925:BE<VAT>`.
+2. Calculate the DNS name with SHA-256 and Base32.
+3. Resolve the `Meta:SMP` U-NAPTR record.
+4. Retrieve the `ServiceGroup` over HTTPS from the discovered SMP.
+5. Extract the advertised document types.
 
-L’endpoint nécessite une clé API entreprise. Une absence de record DNS retourne
-`registered: false`. Une panne DNS, un record non conforme ou une réponse SMP
-invalide retourne une erreur de gateway afin de ne pas confondre une panne du
-réseau avec une entreprise non inscrite.
+The endpoint requires an enterprise API key. A missing DNS record returns
+`registered: false`. A DNS outage, malformed record or invalid SMP response
+returns a gateway error so that a network failure is not mistaken for an
+unregistered participant.
 
-`PEPPOL_SML_DOMAIN` permet de sélectionner un autre environnement SML et
-`PEPPOL_LOOKUP_TIMEOUT_MS` limite la durée de l’appel externe. Le domaine de
-production par défaut est `edelivery.tech.ec.europa.eu`.
+`PEPPOL_SML_DOMAIN` selects another SML environment, and
+`PEPPOL_LOOKUP_TIMEOUT_MS` limits the external request duration. The default
+production domain is `edelivery.tech.ec.europa.eu`.
 
-Un smoke test vérifie l’entreprise `0732788874` directement sur le réseau de
-production. Il est séparé de la suite unitaire pour ne pas rendre les tests
-locaux et CI dépendants d’Internet :
+A smoke test checks enterprise `0732788874` directly on the production network.
+It is kept separate from the unit test suite so local and CI tests do not depend
+on Internet access:
 
 ```bash
 pnpm test:network
 ```
 
-## Webhooks clients
+## Client webhooks
 
-Chaque endpoint choisit ses événements :
+Each endpoint selects its events:
 
 `document.pending`, `document.sent`, `document.delivered`, `document.failed`,
 `document.received`, `document.invalid`.
 
-La signature est calculée ainsi :
+The signature is calculated as follows:
 
 ```text
 hex(HMAC_SHA256(webhook_secret, "<timestamp>.<raw_json_body>"))
 ```
 
-Headers envoyés :
+Sent headers:
 
-- `x-peppol-delivery` : identifiant stable de livraison pour la déduplication ;
-- `x-peppol-event` ;
-- `x-peppol-timestamp` ;
-- `x-peppol-signature: v1=<signature>`.
+- `x-peppol-delivery`: stable delivery identifier used for deduplication
+- `x-peppol-event`
+- `x-peppol-timestamp`
+- `x-peppol-signature: v1=<signature>`
 
-Les échecs sont persistés et retentés avec backoff exponentiel. Le consommateur
-doit dédupliquer sur `x-peppol-delivery`.
+Failures are persisted and retried with exponential backoff. Consumers must
+deduplicate deliveries using `x-peppol-delivery`.
 
-Chaque livraison est d’abord enregistrée dans l’outbox PostgreSQL, puis publiée
-dans Redis avec son UUID comme `jobId` BullMQ. Le service `webhook-worker`
-continue donc les livraisons et retries lorsque le processus HTTP redémarre ou
-est indisponible. Un scanner dans le worker republie périodiquement les lignes
-`PENDING` qui n’auraient pas atteint Redis après un crash entre l’écriture SQL
-et la publication.
+Each delivery is first recorded in the PostgreSQL outbox and then published to
+Redis using its UUID as the BullMQ `jobId`. The `webhook-worker` service
+therefore continues deliveries and retries while the HTTP process is restarting
+or unavailable. A worker-side scanner periodically republishes `PENDING` rows
+that may not have reached Redis after a crash between the SQL write and queue
+publication.
 
-Redis utilise AOF dans Docker Compose et un volume persistant. En production,
-l’API et `node dist/worker.mjs` doivent être déployés comme deux processus
-indépendants partageant la même base et le même `REDIS_URL`.
+Redis uses AOF and a persistent volume in Docker Compose. In production, the API
+and `node dist/worker.mjs` must be deployed as two independent processes sharing
+the same database and `REDIS_URL`.
 
-Le webhook Dokapi entrant exige `x-webhook-secret`, qui doit correspondre à
+The incoming Dokapi webhook requires `x-webhook-secret`, which must match
 `DOKAPI_WEBHOOK_SECRET`.
 
-## Ajouter un provider
+## Adding a provider
 
-1. Implémenter `PeppolProvider` dans `src/providers/`.
-2. Ajouter la résolution de credentials dans `src/providers/factory.ts`.
-3. Ajouter le provider à l’enum Drizzle et générer une migration.
-4. Implémenter son webhook Hono authentifié et idempotent sous
+1. Implement `PeppolProvider` under `src/providers/`.
+2. Add credential resolution to `src/providers/factory.ts`.
+3. Add the provider to the Drizzle enum and generate a migration.
+4. Implement its authenticated, idempotent Hono webhook under
    `src/routes/provider-webhooks/`.
 
-La génération XML, le contrôle tenant, KoSIT, le stockage et les webhooks
-clients restent communs et ne doivent pas être réimplémentés dans l’adapter.
+XML generation, tenant authorization, KoSIT validation, persistence and client
+webhooks remain shared and must not be reimplemented in the adapter.
 
-## Licence
+## License
 
-Ce projet est distribué sous la [licence MIT](./LICENSE).
+This project is distributed under the [MIT License](./LICENSE).
